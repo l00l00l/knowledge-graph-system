@@ -1,67 +1,99 @@
-# backend/app/api/api_v1/endpoints/relationships.py
-from typing import Any, Dict, List, Optional
-
-from fastapi import APIRouter, Depends, HTTPException
-
-from ....db.neo4j_db import Neo4jDatabase
-from ....models.relationships.relationship import Relationship
+# 文件: app/api/api_v1/endpoints/relationships.py
+from typing import List, Optional
+from uuid import UUID
+from fastapi import APIRouter, Depends, HTTPException, Query
+from app.models.relationships.relationship import Relationship
+from app.db.neo4j_db import Neo4jDatabase
+from app.api.deps import get_db
 
 router = APIRouter()
 
-# Neo4j数据库依赖
-def get_db():
-    db = Neo4jDatabase()
-    try:
-        yield db
-    finally:
-        pass
+
+@router.get("/", response_model=List[Relationship])
+async def read_relationships(
+    skip: int = 0,
+    limit: int = 100,
+    relationship_type: Optional[str] = None,
+    source_id: Optional[UUID] = None,
+    target_id: Optional[UUID] = None,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """获取关系列表，支持分页和过滤"""
+    query = {}
+    if relationship_type:
+        query["type"] = relationship_type
+    if source_id:
+        query["source_id"] = source_id
+    if target_id:
+        query["target_id"] = target_id
+    
+    return await db.find(query)
 
 
-@router.post("/", response_model=Dict[str, str])
-def create_relationship(relationship: Relationship, db: Neo4jDatabase = Depends(get_db)) -> Any:
-    """创建实体间关系"""
-    try:
-        relationship_id = db.create_relationship(relationship.dict())
-        return {"id": relationship_id, "message": "关系创建成功"}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建关系失败: {str(e)}")
+@router.post("/", response_model=Relationship)
+async def create_relationship(
+    relationship: Relationship,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """创建新关系"""
+    return await db.create(relationship)
 
 
-@router.get("/{relationship_id}", response_model=Optional[Dict[str, Any]])
-def read_relationship(relationship_id: str, db: Neo4jDatabase = Depends(get_db)) -> Any:
-    """获取关系详情"""
-    relationship = db.get_relationship_by_id(relationship_id)
-    if not relationship:
-        raise HTTPException(status_code=404, detail="关系不存在")
+@router.get("/{relationship_id}", response_model=Relationship)
+async def read_relationship(
+    relationship_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """获取指定ID的关系"""
+    relationship = await db.read(relationship_id)
+    if relationship is None:
+        raise HTTPException(status_code=404, detail="Relationship not found")
     return relationship
 
 
-@router.get("/entity/{entity_id}", response_model=List[Dict[str, Any]])
-def get_entity_relationships(
-    entity_id: str, 
-    direction: Optional[str] = None,
-    relation_type: Optional[str] = None,
+@router.put("/{relationship_id}", response_model=Relationship)
+async def update_relationship(
+    relationship_id: UUID,
+    relationship: Relationship,
     db: Neo4jDatabase = Depends(get_db)
-) -> Any:
-    """获取与实体相关的所有关系"""
-    direction_query = ""
-    if direction == "outgoing":
-        direction_query = f"MATCH (n)-[r]->(m) WHERE n.uid = '{entity_id}'"
-    elif direction == "incoming":
-        direction_query = f"MATCH (n)<-[r]-(m) WHERE n.uid = '{entity_id}'"
-    else:
-        direction_query = f"MATCH (n)-[r]-(m) WHERE n.uid = '{entity_id}'"
+):
+    """更新关系"""
+    updated_relationship = await db.update(relationship_id, relationship)
+    if updated_relationship is None:
+        raise HTTPException(status_code=404, detail="Relationship not found")
+    return updated_relationship
+
+
+@router.delete("/{relationship_id}", response_model=bool)
+async def delete_relationship(
+    relationship_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """删除关系"""
+    success = await db.delete(relationship_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Relationship not found")
+    return success
+
+
+@router.get("/{relationship_id}/trace", response_model=List[dict])
+async def trace_relationship_knowledge(
+    relationship_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """追溯关系知识来源"""
+    from app.services.knowledge_query import KnowledgeQueryService
     
-    type_filter = ""
-    if relation_type:
-        type_filter = f" AND type(r) = '{relation_type}'"
+    # 创建查询服务
+    query_service = KnowledgeQueryService(db)
     
-    query = f"{direction_query}{type_filter} RETURN r, startNode(r) as source, endNode(r) as target"
+    # 获取关系
+    relationship = await db.read(relationship_id)
+    if relationship is None:
+        raise HTTPException(status_code=404, detail="Relationship not found")
     
-    try:
-        results = db.execute_cypher(query)
-        return results
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"查询关系失败: {str(e)}")
+    # 获取溯源信息
+    traces = await query_service.trace_knowledge(relationship_id=relationship_id)
+    
+    return traces
+

@@ -1,63 +1,123 @@
-# backend/app/api/api_v1/endpoints/entities.py
-from typing import Any, Dict, List, Optional
-
+# 文件: app/api/api_v1/endpoints/entities.py
+from typing import List, Optional
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-
-from ....db.neo4j_db import Neo4jDatabase
-from ....models.entities.entity import Entity
+from app.models.entities.entity import Entity
+from app.db.neo4j_db import Neo4jDatabase
+from app.api.deps import get_db
 
 router = APIRouter()
 
-# Neo4j数据库依赖
-def get_db():
-    db = Neo4jDatabase()
-    try:
-        yield db
-    finally:
-        # 在这里可以添加清理逻辑如果需要
-        pass
+
+@router.get("/", response_model=List[Entity])
+async def read_entities(
+    skip: int = 0,
+    limit: int = 100,
+    entity_type: Optional[str] = None,
+    name: Optional[str] = Query(None, description="实体名称（支持模糊匹配）"),
+    tag: Optional[str] = Query(None, description="标签过滤"),
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """获取实体列表，支持分页和过滤"""
+    query = {}
+    if entity_type:
+        query["type"] = entity_type
+    if name:
+        query["name"] = name
+    if tag:
+        query["tag"] = tag
+    
+    return await db.find(query)
 
 
-@router.post("/", response_model=Dict[str, str])
-def create_entity(entity: Entity, db: Neo4jDatabase = Depends(get_db)) -> Any:
+@router.post("/", response_model=Entity)
+async def create_entity(
+    entity: Entity,
+    db: Neo4jDatabase = Depends(get_db)
+):
     """创建新实体"""
-    try:
-        entity_id = db.create_entity(entity.dict())
-        return {"id": entity_id, "message": "实体创建成功"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建实体失败: {str(e)}")
+    return await db.create(entity)
 
 
-@router.get("/{entity_id}", response_model=Optional[Dict[str, Any]])
-def read_entity(entity_id: str, db: Neo4jDatabase = Depends(get_db)) -> Any:
-    """获取实体详情"""
-    entity = db.get_entity_by_id(entity_id)
-    if not entity:
-        raise HTTPException(status_code=404, detail="实体不存在")
+@router.get("/{entity_id}", response_model=Entity)
+async def read_entity(
+    entity_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """获取指定ID的实体"""
+    entity = await db.read(entity_id)
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Entity not found")
     return entity
 
 
-@router.get("/", response_model=List[Dict[str, Any]])
-def search_entities(
-    name: Optional[str] = None,
-    label: Optional[str] = None,
-    tag: Optional[str] = None,
-    limit: int = Query(100, gt=0, le=1000),
+@router.put("/{entity_id}", response_model=Entity)
+async def update_entity(
+    entity_id: UUID,
+    entity: Entity,
     db: Neo4jDatabase = Depends(get_db)
-) -> Any:
-    """搜索实体"""
-    query = {}
-    if name:
-        query["name"] = name
-    if label:
-        query["label"] = label
-    if tag:
-        # Neo4j需要特殊处理标签查询，这里简化处理
-        query["tags"] = tag
+):
+    """更新实体"""
+    updated_entity = await db.update(entity_id, entity)
+    if updated_entity is None:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    return updated_entity
+
+
+@router.delete("/{entity_id}", response_model=bool)
+async def delete_entity(
+    entity_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """删除实体"""
+    success = await db.delete(entity_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    return success
+
+
+@router.get("/{entity_id}/context", response_model=dict)
+async def get_entity_context(
+    entity_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """获取实体的上下文信息（相关实体和关系）"""
+    from app.services.knowledge_query import KnowledgeQueryService
     
-    try:
-        entities = db.search_entities(query, limit)
-        return entities
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"查询实体失败: {str(e)}")
+    # 创建查询服务
+    query_service = KnowledgeQueryService(db)
+    
+    # 获取实体
+    entity = await db.read(entity_id)
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    
+    # 获取上下文
+    context = await query_service.get_entity_context(entity_id)
+    
+    return {
+        "entity": entity,
+        "context": context
+    }
+
+
+@router.get("/{entity_id}/trace", response_model=List[dict])
+async def trace_entity_knowledge(
+    entity_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """追溯实体知识来源"""
+    from app.services.knowledge_query import KnowledgeQueryService
+    
+    # 创建查询服务
+    query_service = KnowledgeQueryService(db)
+    
+    # 获取实体
+    entity = await db.read(entity_id)
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    
+    # 获取溯源信息
+    traces = await query_service.trace_knowledge(entity_id=entity_id)
+    
+    return traces

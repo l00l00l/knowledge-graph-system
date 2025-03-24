@@ -1,41 +1,46 @@
-# backend/app/core/config.py
+# 文件: app/core/config.py
 import os
-from typing import Optional
-
-from pydantic import BaseSettings
+from typing import Any, Dict, Optional
+from pydantic import BaseSettings, validator
 
 
 class Settings(BaseSettings):
     """应用配置类"""
+    # 基本配置
+    PROJECT_NAME: str = "个人知识图谱系统"
+    API_V1_PREFIX: str = "/api/v1"
     
-    # 应用基础设置
-    APP_NAME: str = "个人知识图谱系统"
-    APP_VERSION: str = "0.1.0"
-    API_PREFIX: str = "/api"
-    DEBUG: bool = True
-    
-    # 安全设置
-    SECRET_KEY: str = "请修改这个密钥在生产环境中"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
-    
-    # Neo4j 数据库设置
+    # 数据库配置
     NEO4J_URI: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
     NEO4J_USER: str = os.getenv("NEO4J_USER", "neo4j")
     NEO4J_PASSWORD: str = os.getenv("NEO4J_PASSWORD", "password")
-    
-    # SQLite 设置
-    SQLITE_URL: str = os.getenv("SQLITE_URL", "sqlite:///./knowledge_graph.db")
-    
+    NEO4J_DATABASE: str = os.getenv("NEO4J_DATABASE", "neo4j")
+      
     # 文件存储路径
-    DOCUMENT_STORAGE_PATH: str = os.getenv("DOCUMENT_STORAGE_PATH", "./data/documents")
-    WEB_ARCHIVE_PATH: str = os.getenv("WEB_ARCHIVE_PATH", "./data/web_archives")
+    DOCUMENTS_DIR: str = os.getenv("DOCUMENTS_DIR", "./data/documents")
+    ARCHIVES_DIR: str = os.getenv("ARCHIVES_DIR", "./data/archives")
+    EXPORTS_DIR: str = os.getenv("EXPORTS_DIR", "./data/exports")
     
-    # SpaCy 模型设置
+    # CORS配置
+    CORS_ORIGINS: list = ["*"]
+    
+    # NLP配置
     SPACY_MODEL: str = os.getenv("SPACY_MODEL", "zh_core_web_sm")
+    
+    # 其他配置
+    DEFAULT_PAGE_SIZE: int = 20
+    MAX_PAGE_SIZE: int = 100
+    
+    @validator("DOCUMENTS_DIR", "ARCHIVES_DIR", "EXPORTS_DIR")
+    def create_directories(cls, v):
+        """确保目录存在"""
+        os.makedirs(v, exist_ok=True)
+        return v
     
     class Config:
         env_file = ".env"
         case_sensitive = True
 
 
+# 创建全局配置对象
 settings = Settings()

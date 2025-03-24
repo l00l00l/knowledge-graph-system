@@ -1,51 +1,69 @@
-# backend/app/main.py
-import logging
+# 文件: app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+import logging
 
-from .core.config import settings
-from .api.api_v1.api import api_router
+from app.api.api_v1.api import api_router
+from app.core.config import settings
 
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler()
+    ]
 )
+
 logger = logging.getLogger(__name__)
 
+# 创建应用
 app = FastAPI(
-    title=settings.APP_NAME,
-    description="个人知识图谱构建与查询系统API",
-    version=settings.APP_VERSION,
-    openapi_url=f"{settings.API_PREFIX}/openapi.json",
+    title=settings.PROJECT_NAME,
+    openapi_url=f"{settings.API_V1_PREFIX}/openapi.json"
 )
 
-# 设置CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 在生产环境中应限制来源
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# 配置CORS
+if settings.CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-# 注册API路由
-app.include_router(api_router, prefix=settings.API_PREFIX)
+# 添加API路由
+app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
 
 @app.get("/")
-def root():
-    """API根路径响应"""
+async def root():
+    """根路径响应"""
     return {
-        "app_name": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-        "message": "欢迎使用个人知识图谱系统API"
+        "message": "欢迎使用个人知识图谱系统 API",
+        "version": "0.1.0",
+        "documentation": f"/docs"
     }
 
-@app.get("/health")
-def health_check():
-    """健康检查端点"""
-    return {"status": "healthy"}
 
+@app.on_event("startup")
+async def startup_event():
+    """应用启动事件处理"""
+    logger.info("初始化应用...")
+    # 这里可以添加初始化代码，如数据库连接测试等
+    logger.info("应用初始化完成")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭事件处理"""
+    logger.info("关闭应用...")
+    # 这里可以添加清理代码，如关闭连接等
+    logger.info("应用已关闭")
+
+
+# 独立运行时的入口点
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
