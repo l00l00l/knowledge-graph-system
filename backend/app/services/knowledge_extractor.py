@@ -12,7 +12,7 @@ from app.services.nlp_pipeline import NLPPipeline
 from app.db.neo4j_db import Neo4jDatabase
 
 
-class KnowledgeExtractor:
+class SpacyNERExtractor:
     """知识抽取器，负责从文档中提取实体和关系"""
     
     def __init__(self, db: Neo4jDatabase, nlp_pipeline: NLPPipeline = None):
@@ -70,7 +70,6 @@ class KnowledgeExtractor:
                     },
                     bidirectional=False,  # 默认为单向关系
                     certainty=relation_data["confidence"],
-                    source_id=document.id,
                     source_type=document.type,
                     extraction_method="rule_based",
                     confidence=relation_data["confidence"],

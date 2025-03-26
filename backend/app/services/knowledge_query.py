@@ -31,7 +31,7 @@ class KnowledgeQueryService(QueryInterface):
             elif key == "property":
                 # 支持属性查询，格式: property.key=value
                 prop_key, prop_value = value.split('=')
-                conditions.append(f"e.properties @> '{{\\"{prop_key}\\":\\"{prop_value}\\"}}'")
+                conditions.append(f"e.properties @> '{{\"{prop_key}\":\"{prop_value}\"}}'")
             elif key == "tag":
                 conditions.append("$tag IN e.tags")
                 params["tag"] = value

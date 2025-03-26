@@ -9,7 +9,7 @@ from transformers import AutoTokenizer, AutoModel
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-@Language.factory("entity_linker")
+@Language.factory("custom_entity_linker")
 class EntityLinkerComponent:
     """实体链接组件，将识别的实体与知识库实体关联"""
     
@@ -77,8 +77,8 @@ class NLPPipeline:
                     Span.set_extension("confidence", default=0.0)
                 
                 # 添加自定义组件
-                if "entity_linker" not in nlp.pipe_names:
-                    nlp.add_pipe("entity_linker")
+                if "custom_entity_linker" not in nlp.pipe_names:
+                    nlp.add_pipe("custom_entity_linker")
                 
                 self.nlp_processors[lang] = nlp
             except Exception as e:

@@ -1,7 +1,7 @@
 # 文件: app/core/config.py
 import os
 from typing import Any, Dict, Optional
-from pydantic import BaseSettings, validator
+from pydantic import validator, BaseSettings
 
 
 class Settings(BaseSettings):
