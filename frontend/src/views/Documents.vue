@@ -180,10 +180,10 @@
     },
     methods: {
       // File drag and drop handlers
-      onDragOver(e) {
+      onDragOver() {
         this.isDragging = true;
       },
-      onDragLeave(e) {
+      onDragLeave() {
         this.isDragging = false;
       },
       onDrop(e) {
