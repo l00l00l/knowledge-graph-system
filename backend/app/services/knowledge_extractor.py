@@ -3,101 +3,193 @@
 from typing import List, Dict, Any, Optional, Tuple
 from uuid import UUID, uuid4
 import asyncio
+import spacy
+import os
 
 from app.models.entities.entity import Entity
 from app.models.relationships.relationship import Relationship
 from app.models.documents.source_document import SourceDocument
 from app.models.documents.knowledge_trace import KnowledgeTrace
-from app.services.nlp_pipeline import NLPPipeline
 from app.db.neo4j_db import Neo4jDatabase
 
 
 class SpacyNERExtractor:
     """知识抽取器，负责从文档中提取实体和关系"""
     
-    def __init__(self, db: Neo4jDatabase, nlp_pipeline: NLPPipeline = None):
+    def __init__(self, db: Neo4jDatabase, model_name: str = "zh_core_web_sm"):
         self.db = db
-        self.nlp_pipeline = nlp_pipeline or NLPPipeline()
+        self.model_name = model_name
+        
+        # 尝试加载模型，如果失败则使用回退模型
+        try:
+            self.nlp = spacy.load(model_name)
+            print(f"Loaded NLP model: {model_name}")
+        except Exception as e:
+            print(f"Error loading model {model_name}: {e}")
+            try:
+                # 尝试加载基础模型
+                self.nlp = spacy.load("en_core_web_sm")
+                print("Loaded fallback model: en_core_web_sm")
+            except:
+                # 如果仍然失败，使用空白模型
+                print("Using blank model as fallback")
+                self.nlp = spacy.blank("en")
     
-    async def extract_from_document(self, document: SourceDocument, text_content: str) -> Dict[str, Any]:
-        """从文档中提取完整知识"""
-        # 步骤1：提取实体和关系
-        entities, relations = await self.nlp_pipeline.extract_entities_and_relations(text_content)
+    async def extract_entities(self, document: SourceDocument, text_content: str) -> List[Entity]:
+        """从文本中提取实体
         
-        # 步骤2：创建实体模型
-        entity_models = []
-        entity_id_map = {}  # 用于映射提取的实体索引到UUID
+        Args:
+            document: 源文档
+            text_content: 文档文本内容
+            
+        Returns:
+            提取的实体列表
+        """
+        print(f"Extracting entities from document: {document.title}")
         
-        for entity_data in entities:
+        # 限制文本长度以避免处理过大的文档
+        max_length = 100000  # 限制为10万个字符
+        if len(text_content) > max_length:
+            text_content = text_content[:max_length]
+            print(f"Text truncated to {max_length} characters")
+        
+        # 使用spaCy进行实体识别
+        doc = self.nlp(text_content)
+        entities = []
+        
+        # 提取实体
+        for ent in doc.ents:
+            # 映射spaCy实体类型到系统类型
+            entity_type = self._map_entity_type(ent.label_)
+            
+            # 创建实体
             entity = Entity(
-                type=self._map_entity_type(entity_data["type"]),
-                name=entity_data["text"],
-                description=self._generate_description(entity_data, text_content),
+                type=entity_type,
+                name=ent.text,
+                description=self._generate_description(ent, text_content),
                 properties={},
                 source_id=document.id,
                 source_type=document.type,
                 source_location={
-                    "char_offset": entity_data["start_char"],
-                    "char_length": len(entity_data["text"]),
+                    "char_offset": ent.start_char,
+                    "char_length": len(ent.text),
                 },
                 extraction_method="spacy_nlp",
-                confidence=entity_data["confidence"],
+                confidence=0.85,  # 简化，实际应基于置信度计算
             )
+            
+            # 添加到结果
+            entities.append(entity)
             
             # 保存到数据库
             try:
-                saved_entity = await self.db.create(entity)
-                entity_models.append(saved_entity)
-                entity_id_map[entities.index(entity_data)] = saved_entity.id
+                await self.db.create(entity)
+                print(f"Created entity: {entity.name} ({entity.type})")
             except Exception as e:
-                print(f"Error saving entity: {e}")
+                print(f"Error saving entity {entity.name}: {e}")
         
-        # 步骤3：创建关系模型
-        relationship_models = []
-        
-        for relation_data in relations:
-            # 获取源实体和目标实体ID
-            source_idx = relation_data["source"]
-            target_idx = relation_data["target"]
-            
-            if source_idx in entity_id_map and target_idx in entity_id_map:
-                relationship = Relationship(
-                    type=relation_data["type"],
-                    source_id=entity_id_map[source_idx],
-                    target_id=entity_id_map[target_idx],
-                    properties={
-                        "text": relation_data["text"],
-                    },
-                    bidirectional=False,  # 默认为单向关系
-                    certainty=relation_data["confidence"],
-                    source_type=document.type,
-                    extraction_method="rule_based",
-                    confidence=relation_data["confidence"],
-                )
-                
-                # 保存到数据库
-                try:
-                    saved_relationship = await self.db.create(relationship)
-                    relationship_models.append(saved_relationship)
-                except Exception as e:
-                    print(f"Error saving relationship: {e}")
-        
-        # 步骤4：创建知识溯源记录
-        await self.create_knowledge_traces(document, entity_models, relationship_models, text_content)
-        
-        return {
-            "document_id": document.id,
-            "entities": entity_models,
-            "relationships": relationship_models,
-            "entities_count": len(entity_models),
-            "relationships_count": len(relationship_models),
-        }
+        print(f"Extracted {len(entities)} entities")
+        return entities
     
-    async def create_knowledge_traces(self, document: SourceDocument, 
-                                     entities: List[Entity], 
-                                     relationships: List[Relationship], 
-                                     text_content: str) -> List[KnowledgeTrace]:
-        """创建知识溯源记录"""
+    async def extract_relationships(self, document: SourceDocument, entities: List[Entity], text_content: str) -> List[Relationship]:
+        """从文本中提取实体间的关系
+        
+        Args:
+            document: 源文档
+            entities: 已提取的实体
+            text_content: 文档文本内容
+            
+        Returns:
+            提取的关系列表
+        """
+        print(f"Extracting relationships from document: {document.title}")
+        
+        # 如果实体少于2个，无法建立关系
+        if len(entities) < 2:
+            return []
+        
+        # 使用实体共现方法提取潜在关系
+        relationships = []
+        
+        # 构建句子分割
+        doc = self.nlp(text_content)
+        sentences = list(doc.sents)
+        
+        # 基于句子共现建立关系
+        for sent in sentences:
+            # 在当前句子中找实体
+            sent_entities = []
+            for entity in entities:
+                # 检查实体是否在当前句子范围内
+                if entity.source_location:
+                    entity_start = entity.source_location.get("char_offset", 0)
+                    entity_end = entity_start + entity.source_location.get("char_length", 0)
+                    
+                    if sent.start_char <= entity_start and entity_end <= sent.end_char:
+                        sent_entities.append(entity)
+            
+            # 如果句子中有多个实体，创建它们之间的关系
+            if len(sent_entities) >= 2:
+                for i in range(len(sent_entities) - 1):
+                    for j in range(i + 1, len(sent_entities)):
+                        # 检查是否已存在相同的关系
+                        relation_exists = False
+                        for rel in relationships:
+                            if (rel.source_id == sent_entities[i].id and rel.target_id == sent_entities[j].id) or \
+                               (rel.source_id == sent_entities[j].id and rel.target_id == sent_entities[i].id):
+                                relation_exists = True
+                                break
+                        
+                        if not relation_exists:
+                            # 基于实体类型猜测关系类型
+                            relation_type = self._guess_relation_type(
+                                sent_entities[i].type, 
+                                sent_entities[j].type
+                            )
+                            
+                            # 创建关系
+                            relationship = Relationship(
+                                type=relation_type,
+                                source_id=sent_entities[i].id,
+                                target_id=sent_entities[j].id,
+                                properties={
+                                    "context": sent.text,
+                                },
+                                bidirectional=False,
+                                certainty=0.7,  # 共现关系的确定性较低
+                                source_id=document.id,
+                                source_type=document.type,
+                                extraction_method="co_occurrence",
+                                confidence=0.7,
+                            )
+                            
+                            # 添加到结果
+                            relationships.append(relationship)
+                            
+                            # 保存到数据库
+                            try:
+                                await self.db.create(relationship)
+                                print(f"Created relationship: {sent_entities[i].name} --[{relation_type}]--> {sent_entities[j].name}")
+                            except Exception as e:
+                                print(f"Error saving relationship: {e}")
+        
+        print(f"Extracted {len(relationships)} relationships")
+        return relationships
+    
+    async def create_knowledge_traces(self, document: SourceDocument, entities: List[Entity], relationships: List[Relationship], text_content: str) -> List[KnowledgeTrace]:
+        """创建知识溯源记录
+        
+        Args:
+            document: 源文档
+            entities: 提取的实体
+            relationships: 提取的关系
+            text_content: 文档文本内容
+            
+        Returns:
+            创建的溯源记录列表
+        """
+        print(f"Creating knowledge traces for document: {document.title}")
+        
         traces = []
         
         # 为每个实体创建溯源记录
@@ -130,12 +222,16 @@ class SpacyNERExtractor:
                     },
                 )
                 
-                # 保存到数据库（实际实现中）
+                # 添加到结果
                 traces.append(trace)
+                
+                # 这里应该保存到数据库，但目前我们只返回结果
+                print(f"Created trace for entity: {entity.name}")
         
-        # 类似地，为关系创建溯源记录
-        # 省略类似实现...
+        # 为关系创建溯源记录
+        # 简化实现，实际系统中可能会更复杂
         
+        print(f"Created {len(traces)} knowledge traces")
         return traces
     
     def _map_entity_type(self, spacy_type: str) -> str:
@@ -157,10 +253,10 @@ class SpacyNERExtractor:
         }
         return mapping.get(spacy_type, "concept")
     
-    def _generate_description(self, entity_data: Dict[str, Any], text_content: str) -> str:
+    def _generate_description(self, entity, text_content: str) -> str:
         """生成实体描述"""
         # 简单实现：提取实体所在的句子作为描述
-        start = entity_data["start_char"]
+        start = entity.start_char
         
         # 向前寻找句子开始（句号、问号、感叹号之后）
         sentence_start = max(0, start - 200)
@@ -186,3 +282,19 @@ class SpacyNERExtractor:
         """生成文本指纹，用于内容匹配"""
         import hashlib
         return hashlib.md5(text.encode("utf-8")).hexdigest()
+    
+    def _guess_relation_type(self, source_type: str, target_type: str) -> str:
+        """根据实体类型猜测关系类型"""
+        # 简单的关系类型推断
+        if source_type == "person" and target_type == "organization":
+            return "works_for"
+        elif source_type == "organization" and target_type == "person":
+            return "employs"
+        elif source_type == "person" and target_type == "location":
+            return "located_in"
+        elif source_type == "concept" and target_type == "concept":
+            return "related_to"
+        elif source_type == target_type:
+            return "related_to"
+        else:
+            return "has_relation"

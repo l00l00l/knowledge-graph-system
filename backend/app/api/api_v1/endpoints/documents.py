@@ -24,21 +24,28 @@ async def upload_document(
     # 处理文档
     result = await document_processor.process_file(file.file, file.filename)
     
+    if result.error:
+        raise HTTPException(status_code=400, detail=f"Error processing document: {result.error}")
+    
     # 如果需要，提取知识
     entities = []
     relationships = []
     if extract_knowledge:
-        # 创建知识抽取器
-        extractor = SpacyNERExtractor(db)
-        
-        # 提取实体
-        entities = await extractor.extract_entities(result.document, result.text_content)
-        
-        # 提取关系
-        relationships = await extractor.extract_relationships(result.document, entities, result.text_content)
-        
-        # 创建溯源记录
-        await extractor.create_knowledge_traces(result.document, entities, relationships, result.text_content)
+        try:
+            # 创建知识抽取器
+            extractor = SpacyNERExtractor(db)
+            
+            # 提取实体
+            entities = await extractor.extract_entities(result.document, result.text_content)
+            
+            # 提取关系
+            relationships = await extractor.extract_relationships(result.document, entities, result.text_content)
+            
+            # 创建溯源记录
+            await extractor.create_knowledge_traces(result.document, entities, relationships, result.text_content)
+        except Exception as e:
+            print(f"Error during knowledge extraction: {e}")
+            # 继续处理，即使知识提取失败
     
     return {
         "document": result.document,
@@ -68,17 +75,21 @@ async def process_url(
     entities = []
     relationships = []
     if extract_knowledge:
-        # 创建知识抽取器
-        extractor = SpacyNERExtractor(db)
-        
-        # 提取实体
-        entities = await extractor.extract_entities(result.document, result.text_content)
-        
-        # 提取关系
-        relationships = await extractor.extract_relationships(result.document, entities, result.text_content)
-        
-        # 创建溯源记录
-        await extractor.create_knowledge_traces(result.document, entities, relationships, result.text_content)
+        try:
+            # 创建知识抽取器
+            extractor = SpacyNERExtractor(db)
+            
+            # 提取实体
+            entities = await extractor.extract_entities(result.document, result.text_content)
+            
+            # 提取关系
+            relationships = await extractor.extract_relationships(result.document, entities, result.text_content)
+            
+            # 创建溯源记录
+            await extractor.create_knowledge_traces(result.document, entities, relationships, result.text_content)
+        except Exception as e:
+            print(f"Error during knowledge extraction: {e}")
+            # 继续处理，即使知识提取失败
     
     return {
         "document": result.document,
@@ -122,3 +133,59 @@ async def delete_document(
     # 这里需要实现文档删除逻辑
     # 为简化示例，返回成功
     return True
+
+
+@router.get("/{document_id}/preview")
+async def preview_document(
+    document_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """预览文档内容"""
+    # 这里需要实现文档预览逻辑
+    # 为简化示例，返回简单内容
+    return {"content": "Document preview content would be displayed here"}
+
+
+@router.get("/{document_id}/download")
+async def download_document(
+    document_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """下载文档"""
+    # 这里需要实现文档下载逻辑
+    # 为简化示例，抛出404错误
+    raise HTTPException(status_code=404, detail="Document not found")
+
+
+@router.post("/{document_id}/extract", response_model=dict)
+async def extract_knowledge(
+    document_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """从文档提取知识"""
+    # 这里需要实现知识提取逻辑
+    # 为简化示例，返回简单结果
+    return {
+        "document_id": str(document_id),
+        "extracted_entities": 0,
+        "extracted_relationships": 0,
+        "message": "Knowledge extraction would be performed here"
+    }
+
+
+@router.get("/{document_id}/export")
+async def export_document(
+    document_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """导出文档及其关联知识"""
+    # 这里需要实现文档导出逻辑
+    # 为简化示例，返回简单内容
+    return {
+        "document_id": str(document_id),
+        "metadata": {},
+        "knowledge": {
+            "entities": [],
+            "relationships": []
+        }
+    }
