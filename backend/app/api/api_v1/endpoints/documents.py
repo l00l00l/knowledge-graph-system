@@ -68,7 +68,7 @@ async def upload_document(
 ):
     """上传文档并可选地提取知识"""
     try:
-        print(f"Starting file upload process for '{file.filename}', size: {file.size if hasattr(file, 'size') else 'unknown'}")
+        print(f"Starting file upload process for '{file.filename}'")
         
         # 创建文档处理器
         document_processor = DocumentProcessor()
@@ -86,10 +86,6 @@ async def upload_document(
             print(f"Document processing error: {result.error}")
             raise HTTPException(status_code=400, detail=f"Error processing document: {result.error}")
         
-        if not result.document:
-            print("Document processor returned no document object")
-            raise HTTPException(status_code=500, detail="Document processor returned no document")
-        
         # 如果需要，提取知识
         entities = []
         relationships = []
@@ -98,24 +94,18 @@ async def upload_document(
         if extract_knowledge:
             try:
                 # 创建知识抽取器
-                try:
-                    extractor = SpacyNERExtractor(db)
-                except Exception as e:
-                    print(f"Error creating knowledge extractor: {str(e)}")
-                    extract_error = f"Failed to initialize knowledge extractor: {str(e)}"
-                    # 继续处理，即使知识抽取器初始化失败
+                extractor = SpacyNERExtractor(db)
                 
-                if not extract_error:
-                    # 提取实体
-                    entities = await extractor.extract_entities(result.document, result.text_content)
+                # 提取实体
+                entities = await extractor.extract_entities(result.document, result.text_content)
+                
+                # 如果至少有两个实体，才提取关系
+                if len(entities) >= 2:
+                    # 提取关系
+                    relationships = await extractor.extract_relationships(result.document, entities, result.text_content)
                     
-                    # 如果至少有两个实体，才提取关系
-                    if len(entities) >= 2:
-                        # 提取关系
-                        relationships = await extractor.extract_relationships(result.document, entities, result.text_content)
-                        
-                        # 创建溯源记录
-                        await extractor.create_knowledge_traces(result.document, entities, relationships, result.text_content)
+                    # 创建溯源记录
+                    await extractor.create_knowledge_traces(result.document, entities, relationships, result.text_content)
                 
             except Exception as e:
                 import traceback
@@ -152,6 +142,7 @@ async def upload_document(
             raise HTTPException(status_code=500, detail=f"Error preparing response: {str(e)}")
         
         print(f"Document upload successful: {file.filename}")
+        
         return {
             "document": document_dict,
             "extracted_entities": len(entities),

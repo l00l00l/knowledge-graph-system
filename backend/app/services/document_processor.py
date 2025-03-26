@@ -58,182 +58,178 @@ class DocumentProcessor:
         os.makedirs(documents_dir, exist_ok=True)
         os.makedirs(archives_dir, exist_ok=True)
     
-
-
-# Updated file reading method for document_processor.py
-
-async def process_file(self, file: BinaryIO, filename: str) -> ProcessResult:
-    """处理上传的文件
-    
-    Args:
-        file: 文件对象
-        filename: 文件名
+    async def process_file(self, file: BinaryIO, filename: str) -> ProcessResult:
+        """处理上传的文件
         
-    Returns:
-        包含处理结果的ProcessResult对象
-    """
-    try:
-        # 打印日志以进行调试
-        print(f"Processing file: {filename}")
-        
-        # 获取文件类型
-        file_ext = os.path.splitext(filename)[1].lower().lstrip('.')
-        if not file_ext:
-            print(f"Missing file extension: {filename}")
-            return ProcessResult(
-                document=None, 
-                text_content="", 
-                metadata={}, 
-                error=f"Missing file extension in filename: {filename}"
-            )
-        
-        # 生成唯一文件名
-        unique_id = str(uuid4())
-        safe_filename = f"{unique_id}_{os.path.basename(filename)}"
-        file_path = os.path.join(self.documents_dir, safe_filename)
-        
-        # 确保目录存在
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        
-        # 保存文件 - 更安全的方法读取文件内容
-        content = None
-        try:
-            # 判断文件对象类型
-            if hasattr(file, "read"):
-                # 对应于常规文件对象，使用标准读取
-                content = await file.read()
-            else:
-                print(f"Warning: file object doesn't have 'read' method, type: {type(file)}")
-                # 尝试直接使用文件对象，如果它本身就是字节内容
-                content = file
-                
-            if not content:
-                raise ValueError("Could not read file content")
+        Args:
+            file: 文件对象
+            filename: 文件名
             
-            # 确保内容是字节类型
-            if not isinstance(content, bytes):
-                if isinstance(content, str):
-                    content = content.encode('utf-8')
+        Returns:
+            包含处理结果的ProcessResult对象
+        """
+        try:
+            # 打印日志以进行调试
+            print(f"Processing file: {filename}")
+            
+            # 获取文件类型
+            file_ext = os.path.splitext(filename)[1].lower().lstrip('.')
+            if not file_ext:
+                print(f"Missing file extension: {filename}")
+                return ProcessResult(
+                    document=None, 
+                    text_content="", 
+                    metadata={}, 
+                    error=f"Missing file extension in filename: {filename}"
+                )
+            
+            # 生成唯一文件名
+            unique_id = str(uuid4())
+            safe_filename = f"{unique_id}_{os.path.basename(filename)}"
+            file_path = os.path.join(self.documents_dir, safe_filename)
+            
+            # 确保目录存在
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            # 保存文件 - 更安全的方法读取文件内容
+            content = None
+            try:
+                # 判断文件对象类型
+                if hasattr(file, "read"):
+                    # 对应于常规文件对象，使用标准读取
+                    content = await file.read()
                 else:
-                    raise TypeError(f"Unexpected content type: {type(content)}")
-        except Exception as e:
-            print(f"Error reading file content: {str(e)}")
-            return ProcessResult(
-                document=None, 
-                text_content="", 
-                metadata={}, 
-                error=f"Error reading file: {str(e)}"
-            )
-        
-        # 计算文件内容哈希
-        content_hash = f"sha256:{hashlib.sha256(content).hexdigest()}"
-        
-        # 写入文件
-        try:
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(content)
-            print(f"File written to {file_path}")
-        except Exception as e:
-            print(f"Error writing file to disk: {str(e)}")
-            return ProcessResult(
-                document=None, 
-                text_content="", 
-                metadata={}, 
-                error=f"Error writing file to disk: {str(e)}"
-            )
-        
-        # 重置文件指针以便后续读取 - 我们已经有了内容，所以不再需要此步骤
-        # 创建SourceDocument记录
-        document = SourceDocument(
-            id=UUID(unique_id),
-            title=filename,
-            type=file_ext,
-            content_hash=content_hash,
-            file_path=file_path,
-            metadata={},
-            accessed_at=datetime.now()
-        )
-        
-        # 提取内容和元数据
-        text_content = ""
-        metadata = {}
-        try:
-            text_content, metadata = await self._extract_content_and_metadata(file_path, file_ext)
-            print(f"Extracted content length: {len(text_content)}, metadata keys: {list(metadata.keys())}")
-        except Exception as e:
-            print(f"Error in content extraction: {str(e)}")
-            # 简单地使用文本编码作为备选方案
-            try:
-                # 尝试将内容解码为文本
-                text_content = content.decode('utf-8', errors='replace')
-                metadata = {
-                    'file_size': len(content),
-                    'note': 'Extracted as plain text due to processing error'
-                }
-                print(f"Fallback extraction: using content as plain text, size: {len(text_content)}")
-            except Exception as decode_err:
-                print(f"Error in fallback content extraction: {str(decode_err)}")
+                    print(f"Warning: file object doesn't have 'read' method, type: {type(file)}")
+                    # 尝试直接使用文件对象，如果它本身就是字节内容
+                    content = file
+                    
+                if not content:
+                    raise ValueError("Could not read file content")
+                
+                # 确保内容是字节类型
+                if not isinstance(content, bytes):
+                    if isinstance(content, str):
+                        content = content.encode('utf-8')
+                    else:
+                        raise TypeError(f"Unexpected content type: {type(content)}")
+            except Exception as e:
+                print(f"Error reading file content: {str(e)}")
                 return ProcessResult(
                     document=None, 
                     text_content="", 
                     metadata={}, 
-                    error=f"Error extracting content and metadata: {str(e)}. Fallback also failed: {str(decode_err)}"
+                    error=f"Error reading file: {str(e)}"
                 )
-        
-        # 检查元数据中是否有错误信息
-        if isinstance(metadata, dict) and "error" in metadata:
-            print(f"Error reported in metadata: {metadata['error']}")
-            # 使用文本编码作为备选方案，而不是直接返回错误
+            
+            # 计算文件内容哈希
+            content_hash = f"sha256:{hashlib.sha256(content).hexdigest()}"
+            
+            # 写入文件
             try:
-                # 尝试将内容解码为文本
-                text_content = content.decode('utf-8', errors='replace')
-                metadata = {
-                    'file_size': len(content),
-                    'note': f'Extracted as plain text due to processing error: {metadata["error"]}',
-                    'original_error': metadata["error"]
-                }
-                print(f"Using fallback extraction due to metadata error")
-            except Exception as decode_err:
-                print(f"Fallback extraction failed: {str(decode_err)}")
+                async with aiofiles.open(file_path, 'wb') as f:
+                    await f.write(content)
+                print(f"File written to {file_path}")
+            except Exception as e:
+                print(f"Error writing file to disk: {str(e)}")
                 return ProcessResult(
                     document=None, 
                     text_content="", 
                     metadata={}, 
-                    error=metadata["error"]
+                    error=f"Error writing file to disk: {str(e)}"
                 )
-        
-        # 更新文档元数据
-        document.metadata.update(metadata)
-        
-        # 创建归档副本
-        archive_path = os.path.join(self.archives_dir, f"{unique_id}.{file_ext}")
-        
-        # 确保归档目录存在
-        os.makedirs(os.path.dirname(archive_path), exist_ok=True)
-        
-        try:
-            await self._create_archive_copy(file_path, archive_path)
-            document.archived_path = archive_path
-            print(f"Created archive copy at {archive_path}")
+            
+            # 重置文件指针以便后续读取 - 我们已经有了内容，所以不再需要此步骤
+            # 创建SourceDocument记录
+            document = SourceDocument(
+                id=UUID(unique_id),
+                title=filename,
+                type=file_ext,
+                content_hash=content_hash,
+                file_path=file_path,
+                metadata={},
+                accessed_at=datetime.now()
+            )
+            
+            # 提取内容和元数据
+            text_content = ""
+            metadata = {}
+            try:
+                text_content, metadata = await self._extract_content_and_metadata(file_path, file_ext)
+                print(f"Extracted content length: {len(text_content)}, metadata keys: {list(metadata.keys())}")
+            except Exception as e:
+                print(f"Error in content extraction: {str(e)}")
+                # 简单地使用文本编码作为备选方案
+                try:
+                    # 尝试将内容解码为文本
+                    text_content = content.decode('utf-8', errors='replace')
+                    metadata = {
+                        'file_size': len(content),
+                        'note': 'Extracted as plain text due to processing error'
+                    }
+                    print(f"Fallback extraction: using content as plain text, size: {len(text_content)}")
+                except Exception as decode_err:
+                    print(f"Error in fallback content extraction: {str(decode_err)}")
+                    return ProcessResult(
+                        document=None, 
+                        text_content="", 
+                        metadata={}, 
+                        error=f"Error extracting content and metadata: {str(e)}. Fallback also failed: {str(decode_err)}"
+                    )
+            
+            # 检查元数据中是否有错误信息
+            if isinstance(metadata, dict) and "error" in metadata:
+                print(f"Error reported in metadata: {metadata['error']}")
+                # 使用文本编码作为备选方案，而不是直接返回错误
+                try:
+                    # 尝试将内容解码为文本
+                    text_content = content.decode('utf-8', errors='replace')
+                    metadata = {
+                        'file_size': len(content),
+                        'note': f'Extracted as plain text due to processing error: {metadata["error"]}',
+                        'original_error': metadata["error"]
+                    }
+                    print(f"Using fallback extraction due to metadata error")
+                except Exception as decode_err:
+                    print(f"Fallback extraction failed: {str(decode_err)}")
+                    return ProcessResult(
+                        document=None, 
+                        text_content="", 
+                        metadata={}, 
+                        error=metadata["error"]
+                    )
+            
+            # 更新文档元数据
+            document.metadata.update(metadata)
+            
+            # 创建归档副本
+            archive_path = os.path.join(self.archives_dir, f"{unique_id}.{file_ext}")
+            
+            # 确保归档目录存在
+            os.makedirs(os.path.dirname(archive_path), exist_ok=True)
+            
+            try:
+                await self._create_archive_copy(file_path, archive_path)
+                document.archived_path = archive_path
+                print(f"Created archive copy at {archive_path}")
+            except Exception as e:
+                # 如果创建归档副本失败，不要中断处理
+                print(f"Warning: Could not create archive copy: {e}")
+                # 仍然继续处理
+            
+            print(f"File processing completed successfully for {filename}")
+            return ProcessResult(document=document, text_content=text_content, metadata=metadata)
+            
         except Exception as e:
-            # 如果创建归档副本失败，不要中断处理
-            print(f"Warning: Could not create archive copy: {e}")
-            # 仍然继续处理
-        
-        print(f"File processing completed successfully for {filename}")
-        return ProcessResult(document=document, text_content=text_content, metadata=metadata)
-        
-    except Exception as e:
-        # 出错时返回错误信息
-        import traceback
-        traceback.print_exc() # 这将打印详细的堆栈跟踪到控制台
-        print(f"Unhandled error in document processing: {str(e)}")
-        return ProcessResult(
-            document=None, 
-            text_content="", 
-            metadata={}, 
-            error=f"Error processing file: {str(e)}"
-        )
+            # 出错时返回错误信息
+            import traceback
+            traceback.print_exc() # 这将打印详细的堆栈跟踪到控制台
+            print(f"Unhandled error in document processing: {str(e)}")
+            return ProcessResult(
+                document=None, 
+                text_content="", 
+                metadata={}, 
+                error=f"Error processing file: {str(e)}"
+            )
     
     async def process_url(self, url: str) -> ProcessResult:
         """处理URL
