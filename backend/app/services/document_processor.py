@@ -1,7 +1,5 @@
-# 文件: app/services/document_processor.py
-import fitz  # PyMuPDF for advanced PDF handling
-import docx
-import chardet
+# app/services/document_processor.py
+
 from typing import Tuple, Dict, Any, BinaryIO, NamedTuple
 import os
 import aiofiles
@@ -12,12 +10,36 @@ from fastapi import UploadFile, File
 
 from app.models.documents.source_document import SourceDocument
 
+# Conditional imports to handle missing dependencies gracefully
+try:
+    import fitz  # PyMuPDF for PDF handling
+    HAS_FITZ = True
+except ImportError:
+    HAS_FITZ = False
+    print("WARNING: PyMuPDF (fitz) not installed. PDF processing will be limited.")
+
+try:
+    import docx
+    HAS_DOCX = True
+except ImportError:
+    HAS_DOCX = False
+    print("WARNING: python-docx not installed. DOCX processing will be limited.")
+
+try:
+    import chardet
+    HAS_CHARDET = True
+except ImportError:
+    HAS_CHARDET = False
+    print("WARNING: chardet not installed. Text encoding detection will be limited.")
+
+
 class ProcessResult(NamedTuple):
     """文档处理结果"""
     document: SourceDocument
     text_content: str
     metadata: Dict[str, Any]
     error: str = None
+
 
 class DocumentProcessor:
     """增强版文档处理器，支持多格式文档解析与结构保留"""
@@ -49,24 +71,54 @@ class DocumentProcessor:
         try:
             # 获取文件类型
             file_ext = os.path.splitext(filename)[1].lower().lstrip('.')
+            if not file_ext:
+                return ProcessResult(
+                    document=None, 
+                    text_content="", 
+                    metadata={}, 
+                    error=f"Missing file extension in filename: {filename}"
+                )
             
             # 生成唯一文件名
             unique_id = str(uuid4())
             safe_filename = f"{unique_id}_{os.path.basename(filename)}"
             file_path = os.path.join(self.documents_dir, safe_filename)
             
+            # 确保目录存在
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
             # 保存文件
-            content = await file.read()
+            try:
+                content = await file.read()
+            except Exception as e:
+                return ProcessResult(
+                    document=None, 
+                    text_content="", 
+                    metadata={}, 
+                    error=f"Error reading file: {str(e)}"
+                )
             
             # 计算文件内容哈希
             content_hash = f"sha256:{hashlib.sha256(content).hexdigest()}"
             
             # 写入文件
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(content)
+            try:
+                async with aiofiles.open(file_path, 'wb') as f:
+                    await f.write(content)
+            except Exception as e:
+                return ProcessResult(
+                    document=None, 
+                    text_content="", 
+                    metadata={}, 
+                    error=f"Error writing file to disk: {str(e)}"
+                )
             
             # 重置文件指针以便后续读取
-            await file.seek(0)
+            try:
+                await file.seek(0)
+            except Exception as e:
+                # 如果无法重置文件指针，不要中断处理，只是记录警告
+                print(f"Warning: Could not reset file pointer: {e}")
             
             # 创建SourceDocument记录
             document = SourceDocument(
@@ -80,20 +132,48 @@ class DocumentProcessor:
             )
             
             # 提取内容和元数据
-            text_content, metadata = await self._extract_content_and_metadata(file_path, file_ext)
+            try:
+                text_content, metadata = await self._extract_content_and_metadata(file_path, file_ext)
+            except Exception as e:
+                return ProcessResult(
+                    document=None, 
+                    text_content="", 
+                    metadata={}, 
+                    error=f"Error extracting content and metadata: {str(e)}"
+                )
+            
+            # 检查元数据中是否有错误信息
+            if isinstance(metadata, dict) and "error" in metadata:
+                return ProcessResult(
+                    document=None, 
+                    text_content="", 
+                    metadata={}, 
+                    error=metadata["error"]
+                )
             
             # 更新文档元数据
             document.metadata.update(metadata)
             
             # 创建归档副本
             archive_path = os.path.join(self.archives_dir, f"{unique_id}.{file_ext}")
-            await self._create_archive_copy(file_path, archive_path)
-            document.archived_path = archive_path
+            
+            # 确保归档目录存在
+            os.makedirs(os.path.dirname(archive_path), exist_ok=True)
+            
+            try:
+                await self._create_archive_copy(file_path, archive_path)
+                document.archived_path = archive_path
+            except Exception as e:
+                # 如果创建归档副本失败，不要中断处理
+                print(f"Warning: Could not create archive copy: {e}")
+                # 仍然继续处理
             
             return ProcessResult(document=document, text_content=text_content, metadata=metadata)
             
         except Exception as e:
             # 出错时返回错误信息
+            import traceback
+            traceback.print_exc() # 这将打印详细的堆栈跟踪到控制台
             return ProcessResult(
                 document=None, 
                 text_content="", 
@@ -139,6 +219,8 @@ class DocumentProcessor:
             
         except Exception as e:
             # 出错时返回错误信息
+            import traceback
+            traceback.print_exc()
             return ProcessResult(
                 document=None, 
                 text_content="", 
@@ -170,133 +252,172 @@ class DocumentProcessor:
         elif file_type == 'txt':
             return await self._process_text(file_path)
         else:
-            return "", {"error": f"Unsupported file type: {file_type}"}
+            # 对于未知类型，尝试作为文本处理
+            try:
+                return await self._process_text(file_path)
+            except Exception as e:
+                return "", {"error": f"Unsupported file type: {file_type}. Error: {str(e)}"}
     
     async def _process_pdf(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
         """处理PDF文件，提取文本和结构信息"""
-        doc = fitz.open(file_path)
+        if not HAS_FITZ:
+            return "", {"error": "PyMuPDF (fitz) library not installed. Unable to process PDF files."}
         
-        # 提取元数据
-        metadata = {
-            'title': doc.metadata.get('title', ''),
-            'author': doc.metadata.get('author', ''),
-            'subject': doc.metadata.get('subject', ''),
-            'keywords': doc.metadata.get('keywords', ''),
-            'creator': doc.metadata.get('creator', ''),
-            'producer': doc.metadata.get('producer', ''),
-            'creation_date': doc.metadata.get('creationDate', ''),
-            'modification_date': doc.metadata.get('modDate', ''),
-            'page_count': len(doc),
-            'file_size': os.path.getsize(file_path),
-        }
-        
-        # 提取结构化文本
-        text_blocks = []
-        toc = doc.get_toc()  # 获取目录结构
-        
-        # 处理每一页，保留段落和布局信息
-        full_text = ""
-        for page_num, page in enumerate(doc):
-            page_text = page.get_text()
-            full_text += page_text + "\n\n"
+        try:
+            doc = fitz.open(file_path)
             
-            # 获取更详细的块信息用于元数据
-            blocks = page.get_text("dict")["blocks"]
-            for block in blocks:
-                if block["type"] == 0:  # 文本块
-                    for line in block["lines"]:
-                        line_text = " ".join(span["text"] for span in line["spans"])
-                        font_info = line["spans"][0] if line["spans"] else {}
-                        
-                        # 记录字体、大小等排版信息，用于判断标题或正文
-                        text_block_info = {
-                            "text": line_text,
-                            "page": page_num + 1,
-                            "font": font_info.get("font", ""),
-                            "size": font_info.get("size", 0),
-                            "position": (block["bbox"][0], block["bbox"][1])
-                        }
-                        
-                        text_blocks.append(text_block_info)
-        
-        # 将结构信息添加到元数据
-        metadata['structure'] = {
-            'toc': toc,
-            'text_blocks': text_blocks[:100],  # 只保存部分块以避免元数据过大
-        }
-        
-        return full_text, metadata
+            # 提取元数据
+            metadata = {
+                'title': doc.metadata.get('title', ''),
+                'author': doc.metadata.get('author', ''),
+                'subject': doc.metadata.get('subject', ''),
+                'keywords': doc.metadata.get('keywords', ''),
+                'creator': doc.metadata.get('creator', ''),
+                'producer': doc.metadata.get('producer', ''),
+                'creation_date': doc.metadata.get('creationDate', ''),
+                'modification_date': doc.metadata.get('modDate', ''),
+                'page_count': len(doc),
+                'file_size': os.path.getsize(file_path),
+            }
+            
+            # 提取结构化文本
+            text_blocks = []
+            try:
+                toc = doc.get_toc()  # 获取目录结构
+            except Exception:
+                toc = []  # 如果获取目录失败，使用空列表
+            
+            # 处理每一页，保留段落和布局信息
+            full_text = ""
+            for page_num, page in enumerate(doc):
+                try:
+                    page_text = page.get_text()
+                    full_text += page_text + "\n\n"
+                    
+                    # 获取更详细的块信息用于元数据
+                    try:
+                        blocks = page.get_text("dict")["blocks"]
+                        for block in blocks:
+                            if block["type"] == 0:  # 文本块
+                                for line in block["lines"]:
+                                    line_text = " ".join(span["text"] for span in line["spans"])
+                                    font_info = line["spans"][0] if line["spans"] else {}
+                                    
+                                    # 记录字体、大小等排版信息，用于判断标题或正文
+                                    text_block_info = {
+                                        "text": line_text,
+                                        "page": page_num + 1,
+                                        "font": font_info.get("font", ""),
+                                        "size": font_info.get("size", 0),
+                                        "position": (block["bbox"][0], block["bbox"][1])
+                                    }
+                                    
+                                    text_blocks.append(text_block_info)
+                    except Exception as e:
+                        print(f"Warning: Error extracting detailed blocks from page {page_num}: {e}")
+                        # 继续处理下一页
+                except Exception as e:
+                    print(f"Warning: Error processing page {page_num}: {e}")
+                    # 继续处理下一页
+            
+            # 将结构信息添加到元数据
+            metadata['structure'] = {
+                'toc': toc,
+                'text_blocks': text_blocks[:100],  # 只保存部分块以避免元数据过大
+            }
+            
+            return full_text, metadata
+        except Exception as e:
+            # 返回错误信息
+            return "", {"error": f"Error processing PDF: {str(e)}"}
     
     async def _process_word(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
         """处理Word文档，提取文本和结构信息"""
-        doc = docx.Document(file_path)
+        if not HAS_DOCX:
+            return "", {"error": "python-docx library not installed. Unable to process Word documents."}
         
-        # 提取元数据
-        core_properties = doc.core_properties
-        metadata = {
-            'title': core_properties.title or '',
-            'author': core_properties.author or '',
-            'subject': core_properties.subject or '',
-            'keywords': core_properties.keywords or '',
-            'created': core_properties.created.isoformat() if core_properties.created else '',
-            'modified': core_properties.modified.isoformat() if core_properties.modified else '',
-            'paragraph_count': len(doc.paragraphs),
-            'file_size': os.path.getsize(file_path),
-        }
-        
-        # 提取结构化文本
-        text_blocks = []
-        full_text = ""
-        
-        for i, para in enumerate(doc.paragraphs):
-            if para.text.strip():
-                # 获取段落样式信息
-                style_name = para.style.name if para.style else "Normal"
-                
-                # 记录段落信息，包括样式、层级等
-                text_info = {
-                    "text": para.text,
-                    "index": i,
-                    "style": style_name,
-                    "level": 0 if "Heading" not in style_name else int(style_name.replace("Heading ", "")) if style_name.replace("Heading ", "").isdigit() else 0,
-                    "char_offset": len(full_text)
-                }
-                
-                text_blocks.append(text_info)
-                full_text += para.text + "\n"
-        
-        # 将结构信息添加到元数据
-        metadata['structure'] = {
-            'paragraphs': text_blocks,
-        }
-        
-        return full_text, metadata
+        try:
+            doc = docx.Document(file_path)
+            
+            # 提取元数据
+            core_properties = doc.core_properties
+            metadata = {
+                'title': core_properties.title or '',
+                'author': core_properties.author or '',
+                'subject': core_properties.subject or '',
+                'keywords': core_properties.keywords or '',
+                'created': str(core_properties.created) if core_properties.created else '',
+                'modified': str(core_properties.modified) if core_properties.modified else '',
+                'paragraph_count': len(doc.paragraphs),
+                'file_size': os.path.getsize(file_path),
+            }
+            
+            # 提取结构化文本
+            text_blocks = []
+            full_text = ""
+            
+            for i, para in enumerate(doc.paragraphs):
+                if para.text.strip():
+                    # 获取段落样式信息
+                    style_name = para.style.name if para.style else "Normal"
+                    
+                    # 记录段落信息，包括样式、层级等
+                    text_info = {
+                        "text": para.text,
+                        "index": i,
+                        "style": style_name,
+                        "level": 0 if "Heading" not in style_name else 
+                                int(style_name.replace("Heading ", "")) 
+                                if style_name.replace("Heading ", "").isdigit() else 0,
+                        "char_offset": len(full_text)
+                    }
+                    
+                    text_blocks.append(text_info)
+                    full_text += para.text + "\n"
+            
+            # 将结构信息添加到元数据
+            metadata['structure'] = {
+                'paragraphs': text_blocks,
+            }
+            
+            return full_text, metadata
+        except Exception as e:
+            # 返回错误信息
+            return "", {"error": f"Error processing Word document: {str(e)}"}
     
     async def _process_text(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
         """处理纯文本文件"""
-        # 读取文件内容
-        async with aiofiles.open(file_path, 'rb') as f:
-            content = await f.read()
-        
-        # 检测编码
-        encoding_result = chardet.detect(content)
-        encoding = encoding_result['encoding'] or 'utf-8'
-        
-        # 以检测到的编码解码文本
         try:
-            text = content.decode(encoding)
-        except UnicodeDecodeError:
-            # 如果解码失败，尝试使用UTF-8
-            text = content.decode('utf-8', errors='replace')
-        
-        # 创建元数据
-        metadata = {
-            'file_size': os.path.getsize(file_path),
-            'encoding': encoding,
-            'encoding_confidence': encoding_result['confidence'],
-            'line_count': text.count('\n') + 1,
-            'char_count': len(text),
-            'word_count': len(text.split())
-        }
-        
-        return text, metadata
+            # 读取文件内容
+            async with aiofiles.open(file_path, 'rb') as f:
+                content = await f.read()
+            
+            # 检测编码
+            if HAS_CHARDET:
+                encoding_result = chardet.detect(content)
+                encoding = encoding_result['encoding'] or 'utf-8'
+                encoding_confidence = encoding_result['confidence']
+            else:
+                encoding = 'utf-8'
+                encoding_confidence = 1.0
+            
+            # 以检测到的编码解码文本
+            try:
+                text = content.decode(encoding)
+            except UnicodeDecodeError:
+                # 如果解码失败，尝试使用UTF-8
+                text = content.decode('utf-8', errors='replace')
+            
+            # 创建元数据
+            metadata = {
+                'file_size': os.path.getsize(file_path),
+                'encoding': encoding,
+                'encoding_confidence': encoding_confidence,
+                'line_count': text.count('\n') + 1,
+                'char_count': len(text),
+                'word_count': len(text.split())
+            }
+            
+            return text, metadata
+        except Exception as e:
+            return "", {"error": f"Error processing text file: {str(e)}"}
