@@ -9,6 +9,8 @@ from app.api.deps import get_db
 import os
 import json
 
+from backend.app.services.knowledge_extractor import SpacyNERExtractor
+
 router = APIRouter()
 
 # Create necessary directories
@@ -38,68 +40,69 @@ class MockKnowledgeExtractor:
         return []
 
 
+# app/api/api_v1/endpoints/documents.py (updated upload method)
+
 @router.post("/upload", response_model=dict)
 async def upload_document(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     extract_knowledge: bool = Form(False),
     db: Neo4jDatabase = Depends(get_db)
 ):
     """上传文档并可选地提取知识"""
-    try:
-        # 创建文档处理器
-        document_processor = DocumentProcessor()
-        
-        # 处理文档
-        result = await document_processor.process_file(file.file, file.filename)
-        
-        if result.error:
-            raise HTTPException(status_code=400, detail=f"Error processing document: {result.error}")
-        
-        # Add to mock documents for testing
-        mock_documents.append(result.document)
-        
-        # 如果需要，提取知识 (in background)
-        def extract_knowledge_bg(doc, text):
-            async def _extract():
-                try:
-                    # Use actual extractor if available, otherwise use mock
-                    try:
-                        from app.services.knowledge_extractor import SpacyNERExtractor
-                        extractor = SpacyNERExtractor(db)
-                    except (ImportError, Exception) as e:
-                        print(f"Using mock extractor due to: {e}")
-                        extractor = MockKnowledgeExtractor(db)
-                    
-                    # 提取实体
-                    entities = await extractor.extract_entities(doc, text)
-                    
-                    # 提取关系
-                    relationships = await extractor.extract_relationships(doc, entities, text)
-                    
-                    # 创建溯源记录
-                    await extractor.create_knowledge_traces(doc, entities, relationships, text)
-                    
-                    print(f"Extracted {len(entities)} entities and {len(relationships)} relationships")
-                except Exception as e:
-                    print(f"Background knowledge extraction error: {e}")
+    # 创建文档处理器
+    document_processor = DocumentProcessor()
+    
+    # 处理文档
+    result = await document_processor.process_file(file.file, file.filename)
+    
+    if result.error:
+        raise HTTPException(status_code=400, detail=f"Error processing document: {result.error}")
+    
+    # 如果需要，提取知识
+    entities = []
+    relationships = []
+    extract_error = None
+    
+    if extract_knowledge:
+        try:
+            # 创建知识抽取器
+            extractor = SpacyNERExtractor(db)
             
-            import asyncio
-            asyncio.create_task(_extract())
-        
-        if extract_knowledge:
-            background_tasks.add_task(
-                extract_knowledge_bg, result.document, result.text_content
-            )
-        
-        return {
-            "document": result.document,
-            "extracted_entities": 0,  # Will be processed in background
-            "extracted_relationships": 0,  # Will be processed in background
-            "message": "Document processed successfully. Knowledge extraction will be performed in the background."
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error processing document: {str(e)}")
+            # 提取实体
+            entities = await extractor.extract_entities(result.document, result.text_content)
+            
+            # 如果至少有两个实体，才提取关系
+            if len(entities) >= 2:
+                # 提取关系
+                relationships = await extractor.extract_relationships(result.document, entities, result.text_content)
+                
+                # 创建溯源记录
+                await extractor.create_knowledge_traces(result.document, entities, relationships, result.text_content)
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            extract_error = str(e)
+            print(f"Error during knowledge extraction: {e}")
+            # 继续处理，即使知识提取失败
+    
+    # 保存到数据库 - 确保这部分在try块之外，即使知识提取失败也能保存文档
+    try:
+        # 这里应该实现保存文档到数据库的逻辑
+        # 由于我们没有完整的文档保存逻辑，这里仅作为示例
+        pass
+    except Exception as db_error:
+        print(f"Warning: Could not save document to database: {db_error}")
+    
+    return {
+        "document": result.document,
+        "extracted_entities": len(entities),
+        "extracted_relationships": len(relationships),
+        "extraction_error": extract_error,
+        "message": "Document processed successfully" + (
+            " but knowledge extraction failed: " + extract_error if extract_error else ""
+        )
+    }
 
 
 @router.post("/url", response_model=dict)
