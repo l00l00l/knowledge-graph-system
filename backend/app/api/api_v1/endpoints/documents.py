@@ -58,72 +58,118 @@ class MockKnowledgeExtractor:
         print(f"Mock creating knowledge traces for document: {document.title}")
         return []
 
+# Enhanced upload endpoint with better error handling
 
-@router.post("/upload", response_model=dict)
+@router.post("/upload", response_model=Dict[str, Any])
 async def upload_document(
     file: UploadFile = File(...),
     extract_knowledge: bool = Form(False),
     db: Neo4jDatabase = Depends(get_db)
 ):
     """上传文档并可选地提取知识"""
-    # 创建文档处理器
-    document_processor = DocumentProcessor()
-    
-    # 处理文档
-    result = await document_processor.process_file(file.file, file.filename)
-    
-    if result.error:
-        raise HTTPException(status_code=400, detail=f"Error processing document: {result.error}")
-    
-    # 如果需要，提取知识
-    entities = []
-    relationships = []
-    extract_error = None
-    
-    if extract_knowledge:
+    try:
+        print(f"Starting file upload process for '{file.filename}', size: {file.size if hasattr(file, 'size') else 'unknown'}")
+        
+        # 创建文档处理器
+        document_processor = DocumentProcessor()
+        
+        # 处理文档
         try:
-            # 创建知识抽取器
-            extractor = SpacyNERExtractor(db)
-            
-            # 提取实体
-            entities = await extractor.extract_entities(result.document, result.text_content)
-            
-            # 如果至少有两个实体，才提取关系
-            if len(entities) >= 2:
-                # 提取关系
-                relationships = await extractor.extract_relationships(result.document, entities, result.text_content)
-                
-                # 创建溯源记录
-                await extractor.create_knowledge_traces(result.document, entities, relationships, result.text_content)
-            
+            result = await document_processor.process_file(file.file, file.filename)
         except Exception as e:
             import traceback
             traceback.print_exc()
-            extract_error = str(e)
-            print(f"Error during knowledge extraction: {e}")
-            # 继续处理，即使知识提取失败
-    
-    # 保存到数据库 - 确保这部分在try块之外，即使知识提取失败也能保存文档
-    try:
-        # 这里应该实现保存文档到数据库的逻辑
-        # 添加到mock_documents列表中以便于测试
-        mock_documents.append(result.document)
-    except Exception as db_error:
-        print(f"Warning: Could not save document to database: {db_error}")
-    
-    # 将document转换为dict以便序列化
-    document_dict = result.document.dict()
-    document_dict["id"] = str(document_dict["id"])  # UUID需要转为字符串
-    
-    return {
-        "document": document_dict,
-        "extracted_entities": len(entities),
-        "extracted_relationships": len(relationships),
-        "extraction_error": extract_error,
-        "message": "Document processed successfully" + (
-            " but knowledge extraction failed: " + extract_error if extract_error else ""
-        )
-    }
+            print(f"Unhandled exception in document processing: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Error processing document: {str(e)}")
+        
+        if result.error:
+            print(f"Document processing error: {result.error}")
+            raise HTTPException(status_code=400, detail=f"Error processing document: {result.error}")
+        
+        if not result.document:
+            print("Document processor returned no document object")
+            raise HTTPException(status_code=500, detail="Document processor returned no document")
+        
+        # 如果需要，提取知识
+        entities = []
+        relationships = []
+        extract_error = None
+        
+        if extract_knowledge:
+            try:
+                # 创建知识抽取器
+                try:
+                    extractor = SpacyNERExtractor(db)
+                except Exception as e:
+                    print(f"Error creating knowledge extractor: {str(e)}")
+                    extract_error = f"Failed to initialize knowledge extractor: {str(e)}"
+                    # 继续处理，即使知识抽取器初始化失败
+                
+                if not extract_error:
+                    # 提取实体
+                    entities = await extractor.extract_entities(result.document, result.text_content)
+                    
+                    # 如果至少有两个实体，才提取关系
+                    if len(entities) >= 2:
+                        # 提取关系
+                        relationships = await extractor.extract_relationships(result.document, entities, result.text_content)
+                        
+                        # 创建溯源记录
+                        await extractor.create_knowledge_traces(result.document, entities, relationships, result.text_content)
+                
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                extract_error = str(e)
+                print(f"Error during knowledge extraction: {e}")
+                # 继续处理，即使知识提取失败
+        
+        # 保存到数据库 - 确保这部分在try块之外，即使知识提取失败也能保存文档
+        try:
+            # 添加到mock_documents列表中以便于测试
+            mock_documents.append(result.document)
+            print(f"Added document to mock_documents, current count: {len(mock_documents)}")
+        except Exception as db_error:
+            print(f"Warning: Could not save document to database: {db_error}")
+        
+        # 将document转换为dict以便序列化
+        try:
+            document_dict = result.document.dict()
+            document_dict["id"] = str(document_dict["id"])  # UUID需要转为字符串
+            
+            # 确保metadata是可序列化的
+            if "metadata" in document_dict and document_dict["metadata"]:
+                try:
+                    import json
+                    # 测试序列化是否成功
+                    json.dumps(document_dict["metadata"])
+                except Exception as json_error:
+                    print(f"Metadata serialization error: {str(json_error)}")
+                    # 如果序列化失败，替换为简化版
+                    document_dict["metadata"] = {"note": "Original metadata contained non-serializable values"}
+        except Exception as e:
+            print(f"Error converting document to dict: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error preparing response: {str(e)}")
+        
+        print(f"Document upload successful: {file.filename}")
+        return {
+            "document": document_dict,
+            "extracted_entities": len(entities),
+            "extracted_relationships": len(relationships),
+            "extraction_error": extract_error,
+            "message": "Document processed successfully" + (
+                " but knowledge extraction failed: " + extract_error if extract_error else ""
+            )
+        }
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        # Capture any other unexpected errors
+        import traceback
+        traceback.print_exc()
+        print(f"Unexpected error in upload_document: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
 @router.post("/url", response_model=dict)
