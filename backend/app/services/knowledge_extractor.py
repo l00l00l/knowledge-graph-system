@@ -157,11 +157,14 @@ class SpacyNERExtractor:
                                 },
                                 bidirectional=False,
                                 certainty=0.7,  # 共现关系的确定性较低
-                                source_id=document.id,
+                                # 修复：使用文档来源信息
                                 source_type=document.type,
                                 extraction_method="co_occurrence",
                                 confidence=0.7,
                             )
+                            
+                            # 手动设置source_id属性，避免构造函数中的命名冲突
+                            setattr(relationship, "source_id", document.id)
                             
                             # 添加到结果
                             relationships.append(relationship)

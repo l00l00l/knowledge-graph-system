@@ -478,7 +478,7 @@ export default {
             created_at: '2023-03-05T11:15:00Z'
           }
         ];
-        alert('获取文档列表失败，显示模拟数据：' + error.message);
+        //alert('获取文档列表失败，显示模拟数据：' + error.message);
       } finally {
         this.loading = false;
       }
