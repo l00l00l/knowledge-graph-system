@@ -9,7 +9,26 @@ from app.api.deps import get_db
 import os
 import json
 
-from backend.app.services.knowledge_extractor import SpacyNERExtractor
+# 修正导入路径
+from app.services.knowledge_extractor import SpacyNERExtractor
+
+from pydantic import BaseModel
+from datetime import datetime
+from typing import Dict, Any, Optional
+
+class DocumentResponse(BaseModel):
+    """文档响应模型"""
+    id: str
+    title: str
+    type: str
+    content_hash: str
+    file_path: Optional[str] = None
+    url: Optional[str] = None
+    archived_path: Optional[str] = None
+    metadata: Dict[str, Any] = {}
+    accessed_at: datetime
+    created_at: datetime
+    updated_at: datetime
 
 router = APIRouter()
 
@@ -39,8 +58,6 @@ class MockKnowledgeExtractor:
         print(f"Mock creating knowledge traces for document: {document.title}")
         return []
 
-
-# app/api/api_v1/endpoints/documents.py (updated upload method)
 
 @router.post("/upload", response_model=dict)
 async def upload_document(
@@ -89,13 +106,17 @@ async def upload_document(
     # 保存到数据库 - 确保这部分在try块之外，即使知识提取失败也能保存文档
     try:
         # 这里应该实现保存文档到数据库的逻辑
-        # 由于我们没有完整的文档保存逻辑，这里仅作为示例
-        pass
+        # 添加到mock_documents列表中以便于测试
+        mock_documents.append(result.document)
     except Exception as db_error:
         print(f"Warning: Could not save document to database: {db_error}")
     
+    # 将document转换为dict以便序列化
+    document_dict = result.document.dict()
+    document_dict["id"] = str(document_dict["id"])  # UUID需要转为字符串
+    
     return {
-        "document": result.document,
+        "document": document_dict,
         "extracted_entities": len(entities),
         "extracted_relationships": len(relationships),
         "extraction_error": extract_error,
