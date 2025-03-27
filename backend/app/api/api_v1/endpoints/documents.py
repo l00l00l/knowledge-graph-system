@@ -268,20 +268,52 @@ async def delete_document(
     raise HTTPException(status_code=404, detail="Document not found")
 
 
+# 替换 documents.py 中的 preview_document 函数
+
 @router.get("/{document_id}/preview")
 async def preview_document(
     document_id: UUID,
     db: Neo4jDatabase = Depends(get_db)
 ):
     """预览文档内容"""
-    # Find in mock documents
-    for doc in mock_documents:
-        if doc.id == document_id:
-            # In a real implementation, we would load content from file_path
-            return {"content": f"Preview content for document: {doc.title}"}
-    
-    raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        # 在 mock_documents 中查找
+        for doc in mock_documents:
+            if doc.id == document_id:
+                file_path = doc.file_path
+                if not file_path or not os.path.exists(file_path):
+                    raise HTTPException(status_code=404, detail="Document file not found")
+                
+                # 读取文件内容
+                content = ""
+                try:
+                    async with aiofiles.open(file_path, 'rb') as f:
+                        binary_content = await f.read()
+                        
+                    # 尝试将内容解码为文本
+                    try:
+                        content = binary_content.decode('utf-8', errors='replace')
+                    except UnicodeDecodeError:
+                        content = f"[Binary content - {len(binary_content)} bytes]"
+                        
+                except Exception as e:
+                    content = f"Error reading file: {str(e)}"
+                
+                return {
+                    "title": doc.title,
+                    "type": doc.type,
+                    "content": content,
+                    "preview_available": True
+                }
+        
+        raise HTTPException(status_code=404, detail="Document not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error previewing document: {str(e)}")
 
+
+# 替换 documents.py 中的 download_document 函数
 
 @router.get("/{document_id}/download")
 async def download_document(
@@ -289,13 +321,29 @@ async def download_document(
     db: Neo4jDatabase = Depends(get_db)
 ):
     """下载文档"""
-    # Find in mock documents
-    for doc in mock_documents:
-        if doc.id == document_id:
-            # In a real implementation, we would return a FileResponse
-            raise HTTPException(status_code=501, detail="Download functionality not implemented yet")
-    
-    raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        # 在 mock_documents 中查找
+        for doc in mock_documents:
+            if doc.id == document_id:
+                file_path = doc.file_path
+                if not file_path or not os.path.exists(file_path):
+                    raise HTTPException(status_code=404, detail="Document file not found")
+                
+                filename = os.path.basename(file_path)
+                
+                # 使用 FileResponse 处理文件下载
+                from fastapi.responses import FileResponse
+                return FileResponse(
+                    path=file_path,
+                    filename=filename,
+                    media_type="application/octet-stream"
+                )
+        
+        raise HTTPException(status_code=404, detail="Document not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error downloading document: {str(e)}")
 
 
 @router.post("/{document_id}/extract", response_model=dict)
