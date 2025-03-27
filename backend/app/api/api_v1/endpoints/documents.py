@@ -9,6 +9,10 @@ from app.api.deps import get_db
 import os
 import json
 import aiofiles  # 确保在文件顶部导入这个库
+from sqlalchemy.orm import Session
+from app.db.sqlite_db import get_sqlite_db
+from app.db.models import Document
+from app.db.init_db import init_db
 from fastapi.responses import FileResponse
 
 # 修正导入路径
@@ -17,6 +21,8 @@ from app.services.knowledge_extractor import SpacyNERExtractor
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Dict, Any, Optional
+
+init_db()
 
 class DocumentResponse(BaseModel):
     """文档响应模型"""
@@ -66,12 +72,11 @@ class MockKnowledgeExtractor:
 async def upload_document(
     file: UploadFile = File(...),
     extract_knowledge: bool = Form(False),
-    db: Neo4jDatabase = Depends(get_db)
+    sqlite_db: Session = Depends(get_sqlite_db),  # SQLite依赖
+    neo4j_db: Neo4jDatabase = Depends(get_db)     # Neo4j依赖保持不变
 ):
     """上传文档并可选地提取知识"""
     try:
-        print(f"Starting file upload process for '{file.filename}'")
-        
         # 创建文档处理器
         document_processor = DocumentProcessor()
         
@@ -79,14 +84,27 @@ async def upload_document(
         try:
             result = await document_processor.process_file(file.file, file.filename)
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            print(f"Unhandled exception in document processing: {str(e)}")
             raise HTTPException(status_code=400, detail=f"Error processing document: {str(e)}")
         
         if result.error:
-            print(f"Document processing error: {result.error}")
             raise HTTPException(status_code=400, detail=f"Error processing document: {result.error}")
+        
+        # 将文档存入SQLite数据库
+        doc_model = Document(
+            id=str(result.document.id),
+            title=result.document.title,
+            type=result.document.type,
+            content_hash=result.document.content_hash,
+            file_path=result.document.file_path,
+            url=result.document.url,
+            archived_path=result.document.archived_path,
+            metadata=json.dumps(result.document.metadata)
+        )
+        
+        # 添加到数据库
+        sqlite_db.add(doc_model)
+        sqlite_db.commit()
+        sqlite_db.refresh(doc_model)
         
         # 如果需要，提取知识
         entities = []
@@ -95,55 +113,25 @@ async def upload_document(
         
         if extract_knowledge:
             try:
-                # 创建知识抽取器
-                extractor = SpacyNERExtractor(db)
+                # 创建知识抽取器 - 使用Neo4j
+                extractor = SpacyNERExtractor(neo4j_db)
                 
                 # 提取实体
                 entities = await extractor.extract_entities(result.document, result.text_content)
                 
-                # 如果至少有两个实体，才提取关系
+                # 提取关系
                 if len(entities) >= 2:
-                    # 提取关系
                     relationships = await extractor.extract_relationships(result.document, entities, result.text_content)
                     
                     # 创建溯源记录
                     await extractor.create_knowledge_traces(result.document, entities, relationships, result.text_content)
                 
             except Exception as e:
-                import traceback
-                traceback.print_exc()
                 extract_error = str(e)
                 print(f"Error during knowledge extraction: {e}")
-                # 继续处理，即使知识提取失败
         
-        # 保存到数据库 - 确保这部分在try块之外，即使知识提取失败也能保存文档
-        try:
-            # 添加到mock_documents列表中以便于测试
-            mock_documents.append(result.document)
-            print(f"Added document to mock_documents, current count: {len(mock_documents)}")
-        except Exception as db_error:
-            print(f"Warning: Could not save document to database: {db_error}")
-        
-        # 将document转换为dict以便序列化
-        try:
-            document_dict = result.document.dict()
-            document_dict["id"] = str(document_dict["id"])  # UUID需要转为字符串
-            
-            # 确保metadata是可序列化的
-            if "metadata" in document_dict and document_dict["metadata"]:
-                try:
-                    import json
-                    # 测试序列化是否成功
-                    json.dumps(document_dict["metadata"])
-                except Exception as json_error:
-                    print(f"Metadata serialization error: {str(json_error)}")
-                    # 如果序列化失败，替换为简化版
-                    document_dict["metadata"] = {"note": "Original metadata contained non-serializable values"}
-        except Exception as e:
-            print(f"Error converting document to dict: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error preparing response: {str(e)}")
-        
-        print(f"Document upload successful: {file.filename}")
+        # 将文档转为字典以便序列化
+        document_dict = doc_model.to_dict()
         
         return {
             "document": document_dict,
@@ -207,33 +195,30 @@ async def read_documents(
     limit: int = 100,
     document_type: Optional[str] = None,
     title: Optional[str] = Query(None, description="文档标题（支持模糊匹配）"),
-    db: Neo4jDatabase = Depends(get_db)
+    sqlite_db: Session = Depends(get_sqlite_db)  # 只使用SQLite
 ):
     """获取文档列表，支持分页和过滤"""
-    # Return mock documents for testing
-    filtered_docs = mock_documents
+    # 查询SQLite数据库
+    query = sqlite_db.query(Document)
     
-    # Apply filters
+    # 应用过滤条件
     if document_type:
-        filtered_docs = [doc for doc in filtered_docs if doc.type == document_type]
+        query = query.filter(Document.type == document_type)
     
     if title:
-        filtered_docs = [doc for doc in filtered_docs if title.lower() in doc.title.lower()]
+        query = query.filter(Document.title.like(f"%{title}%"))
     
-    # Apply pagination
-    paginated_docs = filtered_docs[skip:skip+limit]
+    # 按创建时间降序排序
+    query = query.order_by(Document.created_at.desc())
     
-    # Convert to dict for serialization
-    result = []
-    for doc in paginated_docs:
-        doc_dict = doc.dict()
-        # Convert UUID to string for JSON serialization
-        doc_dict["id"] = str(doc_dict["id"])
-        if "source_id" in doc_dict and doc_dict["source_id"]:
-            doc_dict["source_id"] = str(doc_dict["source_id"])
-        result.append(doc_dict)
+    # 应用分页
+    query = query.offset(skip).limit(limit)
     
-    return result
+    # 获取结果
+    documents = query.all()
+    
+    # 转换为字典列表返回
+    return [doc.to_dict() for doc in documents]
 
 
 @router.get("/{document_id}", response_model=dict)
@@ -255,17 +240,13 @@ async def read_document(
 
 @router.get("/{document_id}/preview")
 async def preview_document(
-    document_id: UUID,
-    db: Neo4jDatabase = Depends(get_db)
+    document_id: str,
+    sqlite_db: Session = Depends(get_sqlite_db)
 ):
     """预览文档内容"""
     try:
-        # 查找文档
-        document = None
-        for doc in mock_documents:
-            if doc.id == document_id:
-                document = doc
-                break
+        # 从SQLite获取文档
+        document = sqlite_db.query(Document).filter(Document.id == document_id).first()
         
         if document is None:
             raise HTTPException(status_code=404, detail="Document not found")
@@ -303,17 +284,13 @@ async def preview_document(
 
 @router.get("/{document_id}/download")
 async def download_document(
-    document_id: UUID,
-    db: Neo4jDatabase = Depends(get_db)
+    document_id: str,
+    sqlite_db: Session = Depends(get_sqlite_db)
 ):
     """下载文档"""
     try:
-        # 查找文档
-        document = None
-        for doc in mock_documents:
-            if doc.id == document_id:
-                document = doc
-                break
+        # 从SQLite获取文档
+        document = sqlite_db.query(Document).filter(Document.id == document_id).first()
         
         if document is None:
             raise HTTPException(status_code=404, detail="Document not found")
@@ -338,24 +315,18 @@ async def download_document(
 
 @router.delete("/{document_id}", response_model=bool)
 async def delete_document(
-    document_id: UUID,
-    db: Neo4jDatabase = Depends(get_db)
+    document_id: str,
+    sqlite_db: Session = Depends(get_sqlite_db)
 ):
     """删除文档"""
     try:
-        # 查找并删除文档
-        global mock_documents
-        document = None
-        for i, doc in enumerate(mock_documents):
-            if doc.id == document_id:
-                document = doc
-                mock_documents.pop(i)
-                break
+        # 从SQLite获取文档
+        document = sqlite_db.query(Document).filter(Document.id == document_id).first()
         
         if document is None:
             raise HTTPException(status_code=404, detail="Document not found")
         
-        # 尝试删除物理文件（可选）
+        # 尝试删除物理文件
         try:
             if document.file_path and os.path.exists(document.file_path):
                 os.remove(document.file_path)
@@ -366,12 +337,15 @@ async def delete_document(
             # 记录错误但继续，因为数据库记录已删除
             print(f"Warning: Failed to delete physical file: {str(file_error)}")
         
+        # 从数据库删除记录
+        sqlite_db.delete(document)
+        sqlite_db.commit()
+        
         return True
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting document: {str(e)}")
-
 
 # 替换 documents.py 中的 preview_document 函数
 
