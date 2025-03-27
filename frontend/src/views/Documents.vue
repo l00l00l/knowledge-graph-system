@@ -32,7 +32,7 @@
           <ul class="file-list">
             <li v-for="(file, index) in selectedFiles" :key="index" class="file-item">
               <div class="file-info">
-                <i class="fas fa-file-alt"></i>
+                <i :class="getFileIcon(file.name)"></i>
                 <span class="file-name">{{ file.name }}</span>
                 <span class="file-size">({{ formatFileSize(file.size) }})</span>
               </div>
@@ -49,7 +49,7 @@
             </label>
             
             <button @click="uploadFiles" class="btn btn-primary" :disabled="isUploading">
-              <i class="fas fa-upload"></i>
+              <i :class="isUploading ? 'fas fa-spinner fa-spin' : 'fas fa-upload'"></i>
               {{ isUploading ? '上传中...' : '开始上传' }}
             </button>
           </div>
@@ -66,7 +66,7 @@
             :disabled="isProcessingUrl"
           >
           <button @click="processUrl" class="btn" :disabled="!webUrl || isProcessingUrl">
-            <i class="fas fa-globe"></i>
+            <i :class="isProcessingUrl ? 'fas fa-spinner fa-spin' : 'fas fa-globe'"></i>
             {{ isProcessingUrl ? '处理中...' : '导入' }}
           </button>
         </div>
@@ -91,6 +91,11 @@
           <option value="txt">文本</option>
           <option value="webpage">网页</option>
         </select>
+        
+        <button @click="fetchDocuments" class="refresh-btn" :disabled="loading">
+          <i :class="loading ? 'fas fa-spinner fa-spin' : 'fas fa-sync-alt'"></i>
+          <span>{{ loading ? '加载中...' : '刷新' }}</span>
+        </button>
       </div>
       
       <div v-if="loading" class="loading">
@@ -121,22 +126,86 @@
             <td>{{ doc.type.toUpperCase() }}</td>
             <td>{{ formatDate(doc.created_at) }}</td>
             <td class="document-actions">
-              <button @click="viewDocument(doc)" class="btn-action">
+              <button @click="viewDocument(doc)" class="btn-action" title="预览">
                 <i class="fas fa-eye"></i>
               </button>
-              <button @click="extractFromDocument(doc)" class="btn-action">
+              <button @click="extractFromDocument(doc)" class="btn-action" title="提取知识">
                 <i class="fas fa-magic"></i>
               </button>
-              <button @click="downloadDocument(doc)" class="btn-action">
+              <button @click="downloadDocument(doc)" class="btn-action" title="下载">
                 <i class="fas fa-download"></i>
               </button>
-              <button @click="deleteDocument(doc)" class="btn-action delete">
+              <button @click="deleteDocument(doc)" class="btn-action delete" title="删除">
                 <i class="fas fa-trash"></i>
               </button>
             </td>
           </tr>
         </tbody>
       </table>
+    </div>
+    
+    <!-- 预览对话框 -->
+    <div v-if="showPreview" class="preview-dialog">
+      <div class="preview-content">
+        <div class="preview-header">
+          <h3>{{ previewingDocument.title }}</h3>
+          <button @click="closePreview" class="close-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="preview-body">
+          <div v-if="previewLoading" class="preview-loading">
+            <i class="fas fa-spinner fa-spin"></i>
+            <span>加载中...</span>
+          </div>
+          <div v-else-if="previewError" class="preview-error">
+            <i class="fas fa-exclamation-circle"></i>
+            <span>{{ previewError }}</span>
+          </div>
+          <pre v-else class="content-preview">{{ documentContent }}</pre>
+        </div>
+        <div class="preview-footer">
+          <button @click="closePreview" class="btn">关闭</button>
+          <button @click="downloadDocument(previewingDocument)" class="btn btn-primary">
+            <i class="fas fa-download"></i> 下载
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 确认删除对话框 -->
+    <div v-if="showDeleteConfirm" class="confirm-dialog">
+      <div class="confirm-content">
+        <div class="confirm-header">
+          <h3>确认删除</h3>
+        </div>
+        <div class="confirm-body">
+          <p>您确定要删除文档 "{{ deletingDocument.title }}" 吗？此操作无法撤销，并且将同时删除与之关联的所有知识实体和关系。</p>
+        </div>
+        <div class="confirm-footer">
+          <button @click="cancelDelete" class="btn">取消</button>
+          <button @click="confirmDelete" class="btn btn-danger" :disabled="isDeleting">
+            <i :class="isDeleting ? 'fas fa-spinner fa-spin' : 'fas fa-trash'"></i>
+            {{ isDeleting ? '删除中...' : '删除' }}
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 提取知识进度对话框 -->
+    <div v-if="showExtractProgress" class="progress-dialog">
+      <div class="progress-content">
+        <div class="progress-header">
+          <h3>知识提取</h3>
+        </div>
+        <div class="progress-body">
+          <div class="progress-status">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>正在从"{{ extractingDocument.title }}"提取知识...</p>
+            <p class="progress-info">这可能需要一段时间，请耐心等待</p>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -150,19 +219,36 @@ export default {
       isDragging: false,
       isUploading: false,
       isProcessingUrl: false,
+      isDeleting: false,
       selectedFiles: [],
       extractKnowledge: true,
       webUrl: '',
       searchQuery: '',
       typeFilter: '',
-      documents: []
+      documents: [],
+      
+      // 预览相关
+      showPreview: false,
+      previewingDocument: null,
+      previewLoading: false,
+      documentContent: '',
+      previewError: null,
+      
+      // 删除确认相关
+      showDeleteConfirm: false,
+      deletingDocument: null,
+      
+      // 提取知识相关
+      showExtractProgress: false,
+      extractingDocument: null,
+      isExtracting: false
     };
   },
   computed: {
     filteredDocuments() {
       let filtered = [...this.documents];
       
-      // Apply search filter
+      // 应用搜索过滤
       if (this.searchQuery) {
         const query = this.searchQuery.toLowerCase();
         filtered = filtered.filter(doc => 
@@ -170,12 +256,15 @@ export default {
         );
       }
       
-      // Apply type filter
+      // 应用类型过滤
       if (this.typeFilter) {
         filtered = filtered.filter(doc => doc.type === this.typeFilter);
       }
       
-      return filtered;
+      // 按上传时间降序排序
+      return filtered.sort((a, b) => {
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
     }
   },
   methods: {
@@ -253,7 +342,7 @@ export default {
           
           // 添加上传的文件到文档列表
           if (result.document) {
-            this.documents.push(result.document);
+            this.documents.unshift(result.document); // 添加到列表顶部
             uploadedFiles.push(result.document);
             console.log(`文件 ${file.name} 已存储在:`, result.document.file_path || result.document.archived_path);
           }
@@ -273,9 +362,6 @@ export default {
       // 清除已选择的文件
       this.selectedFiles = [];
       
-      // 刷新文档列表
-      await this.fetchDocuments();
-      
       this.isUploading = false;
     },
     
@@ -286,16 +372,15 @@ export default {
       this.isProcessingUrl = true;
       
       try {
+        // 使用FormData而非URLSearchParams，保持一致性
+        const formData = new FormData();
+        formData.append('url', this.webUrl);
+        formData.append('extract_knowledge', this.extractKnowledge.toString());
+        
         // 调用实际的后端API
         const response = await fetch('/api/v1/documents/url', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({
-            'url': this.webUrl,
-            'extract_knowledge': this.extractKnowledge.toString()
-          })
+          body: formData
         });
         
         if (!response.ok) {
@@ -306,7 +391,7 @@ export default {
         
         // 添加处理的网页到文档列表
         if (result.document) {
-          this.documents.push(result.document);
+          this.documents.unshift(result.document); // 添加到列表顶部
           console.log('网页已存储在:', result.document.archived_path);
           
           // 显示成功消息
@@ -324,87 +409,138 @@ export default {
       }
     },
     
-    // Document actions
-    viewDocument(doc) {
-      // 跳转到文档查看器页面
-      if (doc.type === 'webpage') {
-        // 对于网页类型，可以直接打开原始URL（如果有）
-        if (doc.url) {
-          window.open(doc.url, '_blank');
-          return;
-        }
-      }
+    // Document preview actions
+    async viewDocument(doc) {
+      // 设置预览状态
+      this.previewingDocument = doc;
+      this.showPreview = true;
+      this.previewLoading = true;
+      this.documentContent = '';
+      this.previewError = null;
       
-      // 其他文档类型或网页没有原始URL的情况
-      // 使用预览API
-      const previewUrl = `/api/v1/documents/${doc.id}/preview`;
-      window.open(previewUrl, '_blank');
-    },
-    
-    async extractFromDocument(doc) {
-      // 触发知识提取
       try {
-        if (!confirm(`确定要从文档 "${doc.title}" 提取知识吗？`)) {
+        // 对于网页类型，可以直接打开原始URL
+        if (doc.type === 'webpage' && doc.url) {
+          window.open(doc.url, '_blank');
+          this.closePreview();
           return;
         }
         
+        // 调用API获取文档预览内容
+        const response = await fetch(`/api/v1/documents/${doc.id}/preview`);
+        
+        if (!response.ok) {
+          throw new Error(`预览失败: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.preview_available) {
+          this.documentContent = result.content || '(无内容)';
+        } else {
+          throw new Error('无法预览此类型的文档');
+        }
+      } catch (error) {
+        console.error('预览文档失败:', error);
+        this.previewError = error.message;
+      } finally {
+        this.previewLoading = false;
+      }
+    },
+    
+    closePreview() {
+      this.showPreview = false;
+      this.previewingDocument = null;
+      this.documentContent = '';
+    },
+    
+    // Knowledge extraction
+    async extractFromDocument(doc) {
+      if (this.isExtracting) return;
+      
+      // 设置提取状态
+      this.isExtracting = true;
+      this.extractingDocument = doc;
+      this.showExtractProgress = true;
+      
+      try {
+        // 调用API执行知识提取
         const response = await fetch(`/api/v1/documents/${doc.id}/extract`, {
           method: 'POST'
         });
         
         if (!response.ok) {
-          throw new Error(`提取知识失败：${response.status} ${response.statusText}`);
+          throw new Error(`提取知识失败: ${response.status}`);
         }
         
         const result = await response.json();
         
+        // 提取完成后关闭进度对话框
+        this.showExtractProgress = false;
+        
+        // 显示结果提示
         alert(`知识提取成功！已提取 ${result.extracted_entities} 个实体和 ${result.extracted_relationships} 个关系。`);
       } catch (error) {
-        console.error('知识提取错误:', error);
-        alert('知识提取失败：' + error.message);
+        console.error('知识提取失败:', error);
+        alert('知识提取失败: ' + error.message);
+        this.showExtractProgress = false;
+      } finally {
+        this.isExtracting = false;
+        this.extractingDocument = null;
       }
     },
     
+    // Document download
     downloadDocument(doc) {
-      // 下载文档
+      // 使用更简洁的下载方法
       const downloadUrl = `/api/v1/documents/${doc.id}/download`;
+      window.open(downloadUrl);
+    },
+    
+    // Document delete actions
+    deleteDocument(doc) {
+      // 显示删除确认对话框
+      this.deletingDocument = doc;
+      this.showDeleteConfirm = true;
+    },
+    
+    cancelDelete() {
+      // 取消删除
+      this.showDeleteConfirm = false;
+      this.deletingDocument = null;
+    },
+    
+    async confirmDelete() {
+      if (!this.deletingDocument || this.isDeleting) return;
       
-      // 创建临时a元素用于下载
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = doc.title;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    },
-    
-    async deleteDocument(doc) {
-      // 删除文档
-      if (confirm(`确定要删除文档 "${doc.title}" 吗？这将同时删除与之关联的所有知识实体和关系。`)) {
-        try {
-          const response = await fetch(`/api/v1/documents/${doc.id}`, {
-            method: 'DELETE'
-          });
-          
-          if (!response.ok) {
-            throw new Error(`删除失败：${response.status} ${response.statusText}`);
-          }
-          
-          // 从列表中移除文档
-          this.documents = this.documents.filter(d => d.id !== doc.id);
-          
-          alert('文档已成功删除');
-        } catch (error) {
-          console.error('删除文档错误:', error);
-          alert('删除文档失败：' + error.message);
+      // 设置删除状态
+      this.isDeleting = true;
+      
+      try {
+        // 调用API删除文档
+        const response = await fetch(`/api/v1/documents/${this.deletingDocument.id}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+          throw new Error(`删除失败: ${response.status}`);
         }
+        
+        // 从列表中移除文档
+        this.documents = this.documents.filter(d => d.id !== this.deletingDocument.id);
+        
+        // 关闭确认对话框
+        this.showDeleteConfirm = false;
+        this.deletingDocument = null;
+        
+        // 显示成功提示
+        alert('文档已成功删除');
+      } catch (error) {
+        console.error('删除文档错误:', error);
+        alert('删除文档失败：' + error.message);
+      } finally {
+        this.isDeleting = false;
       }
-    },
-    
-    exportDocument(doc) {
-      // 导出文档元数据和关联知识
-      const exportUrl = `/api/v1/documents/${doc.id}/export`;
-      window.open(exportUrl, '_blank');
     },
     
     // Helper methods
@@ -417,10 +553,13 @@ export default {
       
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     },
+    
     formatDate(dateString) {
+      if (!dateString) return '';
       const date = new Date(dateString);
-      return date.toLocaleDateString();
+      return date.toLocaleString();
     },
+    
     getDocumentIcon(type) {
       const iconMap = {
         'pdf': 'fas fa-file-pdf',
@@ -431,6 +570,25 @@ export default {
       };
       
       return iconMap[type] || 'fas fa-file';
+    },
+    
+    getFileIcon(filename) {
+      const ext = filename.split('.').pop().toLowerCase();
+      
+      const iconMap = {
+        'pdf': 'fas fa-file-pdf',
+        'docx': 'fas fa-file-word',
+        'doc': 'fas fa-file-word',
+        'txt': 'fas fa-file-alt',
+        'html': 'fas fa-file-code',
+        'htm': 'fas fa-file-code',
+        'jpg': 'fas fa-file-image',
+        'jpeg': 'fas fa-file-image',
+        'png': 'fas fa-file-image',
+        'gif': 'fas fa-file-image'
+      };
+      
+      return iconMap[ext] || 'fas fa-file';
     },
     
     // Lifecycle methods
@@ -457,28 +615,7 @@ export default {
         console.log('文档列表已获取，共', this.documents.length, '个文档');
       } catch (error) {
         console.error('获取文档列表错误:', error);
-        // 如果API调用失败，使用模拟数据
-        this.documents = [
-          {
-            id: 'doc1',
-            title: '知识图谱：机遇与挑战.pdf',
-            type: 'pdf',
-            created_at: '2023-01-15T09:28:00Z'
-          },
-          {
-            id: 'doc2',
-            title: '个人知识管理系统设计.docx',
-            type: 'docx',
-            created_at: '2023-02-20T14:35:00Z'
-          },
-          {
-            id: 'doc3',
-            title: '研究笔记.txt',
-            type: 'txt',
-            created_at: '2023-03-05T11:15:00Z'
-          }
-        ];
-        //alert('获取文档列表失败，显示模拟数据：' + error.message);
+        alert('获取文档列表失败：' + error.message);
       } finally {
         this.loading = false;
       }
@@ -556,6 +693,9 @@ h2 {
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .btn:hover {
@@ -576,6 +716,7 @@ h2 {
   margin: 15px 0;
   max-height: 200px;
   overflow-y: auto;
+  padding-left: 0;
 }
 
 .file-item {
@@ -596,6 +737,7 @@ h2 {
 
 .file-name {
   font-weight: 500;
+  word-break: break-word;
 }
 
 .file-size {
@@ -609,6 +751,7 @@ h2 {
   color: #999;
   cursor: pointer;
   font-size: 0.9rem;
+  flex-shrink: 0;
 }
 
 .btn-remove:hover {
@@ -668,6 +811,27 @@ h2 {
   border-radius: 4px;
 }
 
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  background-color: #f0f0f0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #333;
+}
+
+.refresh-btn:hover {
+  background-color: #e0e0e0;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .loading,
 .no-documents {
   text-align: center;
@@ -679,6 +843,7 @@ h2 {
 .no-documents i {
   font-size: 2rem;
   margin-bottom: 10px;
+  display: block;
 }
 
 .documents-table {
@@ -731,9 +896,166 @@ h2 {
   color: #d9534f;
 }
 
+/* 共用对话框样式 */
+.preview-dialog,
+.confirm-dialog,
+.progress-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.preview-content {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 80%;
+  max-width: 900px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.confirm-content,
+.progress-content {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 400px;
+}
+
+.preview-header,
+.confirm-header,
+.progress-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.preview-header h3,
+.confirm-header h3,
+.progress-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #666;
+}
+
+.preview-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  min-height: 200px;
+  max-height: 60vh;
+}
+
+.content-preview {
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.preview-loading,
+.preview-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: #999;
+}
+
+.preview-loading i,
+.preview-error i {
+  font-size: 2rem;
+  margin-bottom: 10px;
+}
+
+.preview-error {
+  color: #d9534f;
+}
+
+.confirm-body,
+.progress-body {
+  padding: 20px;
+}
+
+.preview-footer,
+.confirm-footer {
+  padding: 15px 20px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.progress-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.progress-status i {
+  font-size: 2rem;
+  margin-bottom: 15px;
+  color: var(--primary-color);
+}
+
+.progress-info {
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 10px;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+}
+
+.btn-danger {
+  background-color: #d9534f;
+}
+
 @media (max-width: 768px) {
   .documents-actions {
     grid-template-columns: 1fr;
+  }
+  
+  .filters {
+    flex-direction: column;
+  }
+  
+  .document-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  
+  .preview-content {
+    width: 95%;
+    max-height: 90vh;
+  }
+  
+  .confirm-content,
+  .progress-content {
+    width: 90%;
   }
 }
 </style>

@@ -8,6 +8,8 @@ from app.db.neo4j_db import Neo4jDatabase
 from app.api.deps import get_db
 import os
 import json
+import aiofiles  # 确保在文件顶部导入这个库
+from fastapi.responses import FileResponse
 
 # 修正导入路径
 from app.services.knowledge_extractor import SpacyNERExtractor
@@ -251,6 +253,88 @@ async def read_document(
     
     raise HTTPException(status_code=404, detail="Document not found")
 
+@router.get("/{document_id}/preview")
+async def preview_document(
+    document_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """预览文档内容"""
+    try:
+        # 查找文档
+        document = None
+        for doc in mock_documents:
+            if doc.id == document_id:
+                document = doc
+                break
+        
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        file_path = document.file_path
+        if not file_path or not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Document file not found")
+        
+        # 读取文件内容
+        content = ""
+        try:
+            async with aiofiles.open(file_path, 'rb') as f:
+                binary_content = await f.read()
+                
+            # 尝试将内容解码为文本
+            try:
+                content = binary_content.decode('utf-8', errors='replace')
+            except UnicodeDecodeError:
+                content = f"[Binary content - {len(binary_content)} bytes]"
+                
+        except Exception as e:
+            content = f"Error reading file: {str(e)}"
+        
+        return {
+            "title": document.title,
+            "type": document.type,
+            "content": content,
+            "preview_available": True
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error previewing document: {str(e)}")
+
+
+@router.get("/{document_id}/download")
+async def download_document(
+    document_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """下载文档"""
+    try:
+        # 查找文档
+        document = None
+        for doc in mock_documents:
+            if doc.id == document_id:
+                document = doc
+                break
+        
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        file_path = document.file_path
+        if not file_path or not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Document file not found")
+        
+        # 获取文件名
+        filename = os.path.basename(file_path)
+        
+        # 使用 FileResponse 处理文件下载
+        return FileResponse(
+            path=file_path,
+            filename=filename,
+            media_type="application/octet-stream"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error downloading document: {str(e)}")
 
 @router.delete("/{document_id}", response_model=bool)
 async def delete_document(
@@ -258,14 +342,35 @@ async def delete_document(
     db: Neo4jDatabase = Depends(get_db)
 ):
     """删除文档"""
-    global mock_documents
-    # Find and remove from mock documents
-    for i, doc in enumerate(mock_documents):
-        if doc.id == document_id:
-            mock_documents.pop(i)
-            return True
-    
-    raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        # 查找并删除文档
+        global mock_documents
+        document = None
+        for i, doc in enumerate(mock_documents):
+            if doc.id == document_id:
+                document = doc
+                mock_documents.pop(i)
+                break
+        
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # 尝试删除物理文件（可选）
+        try:
+            if document.file_path and os.path.exists(document.file_path):
+                os.remove(document.file_path)
+            
+            if document.archived_path and os.path.exists(document.archived_path):
+                os.remove(document.archived_path)
+        except Exception as file_error:
+            # 记录错误但继续，因为数据库记录已删除
+            print(f"Warning: Failed to delete physical file: {str(file_error)}")
+        
+        return True
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting document: {str(e)}")
 
 
 # 替换 documents.py 中的 preview_document 函数
