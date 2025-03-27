@@ -342,7 +342,13 @@ export default {
           
           // 添加上传的文件到文档列表
           if (result.document) {
-            this.documents.unshift(result.document); // 添加到列表顶部
+            // 确保document.id是字符串类型
+            if (typeof result.document.id === 'object') {
+              result.document.id = String(result.document.id);
+            }
+            
+            // 添加到列表顶部而不是追加到末尾
+            this.documents.unshift(result.document);
             uploadedFiles.push(result.document);
             console.log(`文件 ${file.name} 已存储在:`, result.document.file_path || result.document.archived_path);
           }
@@ -361,6 +367,9 @@ export default {
       
       // 清除已选择的文件
       this.selectedFiles = [];
+      
+      // 刷新文档列表确保数据最新
+      await this.fetchDocuments();
       
       this.isUploading = false;
     },
@@ -610,7 +619,16 @@ export default {
         
         // 解析响应
         const data = await response.json();
-        this.documents = data;
+        
+        // 确保每个文档对象的id都是字符串类型
+        const processedData = data.map(doc => {
+          if (typeof doc.id === 'object') {
+            return { ...doc, id: String(doc.id) };
+          }
+          return doc;
+        });
+        
+        this.documents = processedData;
         
         console.log('文档列表已获取，共', this.documents.length, '个文档');
       } catch (error) {
