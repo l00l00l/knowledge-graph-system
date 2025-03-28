@@ -98,7 +98,7 @@ async def upload_document(
             file_path=result.document.file_path,
             url=result.document.url,
             archived_path=result.document.archived_path,
-            metadata=json.dumps(result.document.metadata)
+            doc_metadata=json.dumps(result.document.metadata)  # 使用新的列名
         )
         
         # 添加到数据库

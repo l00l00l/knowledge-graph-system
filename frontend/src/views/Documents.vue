@@ -246,25 +246,46 @@ export default {
   },
   computed: {
     filteredDocuments() {
+      if (!Array.isArray(this.documents)) {
+        console.error('documents is not an array:', this.documents);
+        return [];
+      }
+      
       let filtered = [...this.documents];
       
-      // 应用搜索过滤
+      // Apply search filter
       if (this.searchQuery) {
         const query = this.searchQuery.toLowerCase();
         filtered = filtered.filter(doc => 
-          doc.title.toLowerCase().includes(query)
+          doc && doc.title && doc.title.toLowerCase().includes(query)
         );
       }
       
-      // 应用类型过滤
+      // Apply type filter
       if (this.typeFilter) {
-        filtered = filtered.filter(doc => doc.type === this.typeFilter);
+        filtered = filtered.filter(doc => doc && doc.type === this.typeFilter);
       }
       
-      // 按上传时间降序排序
-      return filtered.sort((a, b) => {
-        return new Date(b.created_at) - new Date(a.created_at);
-      });
+      // Sort by upload time in descending order (with error handling)
+      try {
+        filtered.sort((a, b) => {
+          if (!a || !a.created_at) return 1;
+          if (!b || !b.created_at) return -1;
+          
+          const dateA = new Date(a.created_at);
+          const dateB = new Date(b.created_at);
+          
+          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+            return 0;
+          }
+          
+          return dateB - dateA;
+        });
+      } catch (error) {
+        console.error('Error sorting documents:', error);
+      }
+      
+      return filtered;
     }
   },
   methods: {
@@ -565,8 +586,16 @@ export default {
     
     formatDate(dateString) {
       if (!dateString) return '';
-      const date = new Date(dateString);
-      return date.toLocaleString();
+      try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) {
+          return 'Invalid Date';
+        }
+        return date.toLocaleString();
+      } catch (error) {
+        console.error('Error formatting date:', error);
+        return 'Error';
+      }
     },
     
     getDocumentIcon(type) {
@@ -600,12 +629,12 @@ export default {
       return iconMap[ext] || 'fas fa-file';
     },
     
-    // Lifecycle methods
+    // In the fetchDocuments method in Documents.vue, add more debugging and error handling
     async fetchDocuments() {
       this.loading = true;
       
       try {
-        // 调用实际的API获取文档列表
+        console.log('Fetching document list...');
         const response = await fetch('/api/v1/documents', {
           method: 'GET',
           headers: {
@@ -613,14 +642,16 @@ export default {
           }
         });
         
+        console.log('API response status:', response.status);
+        
         if (!response.ok) {
-          throw new Error(`获取文档列表失败：${response.status} ${response.statusText}`);
+          throw new Error(`Failed to fetch document list: ${response.status}`);
         }
         
-        // 解析响应
+        // Parse response
         const data = await response.json();
         
-        // 确保每个文档对象的id都是字符串类型
+        // Process data and ensure IDs are strings
         const processedData = data.map(doc => {
           if (typeof doc.id === 'object') {
             return { ...doc, id: String(doc.id) };
@@ -629,12 +660,13 @@ export default {
         });
         
         this.documents = processedData;
-        
-        console.log('文档列表已获取，共', this.documents.length, '个文档');
+        console.log(`Document list retrieved, total: ${this.documents.length}`);
       } catch (error) {
-        console.error('获取文档列表错误:', error);
-        alert('获取文档列表失败：' + error.message);
+        console.error('Error fetching document list:', error);
+        alert('Failed to fetch document list: ' + error.message);
+        this.documents = []; // Clear the list to avoid showing stale data
       } finally {
+        console.log('Setting loading state to false');
         this.loading = false;
       }
     }

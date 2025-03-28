@@ -14,7 +14,7 @@ class Document(Base):
     file_path = Column(String)
     url = Column(String, nullable=True)
     archived_path = Column(String, nullable=True)
-    metadata = Column(Text, nullable=True)  # 存储为JSON字符串
+    doc_metadata = Column(Text, nullable=True)  # 重命名为doc_metadata
     accessed_at = Column(DateTime, default=datetime.datetime.utcnow)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
@@ -29,7 +29,7 @@ class Document(Base):
             "file_path": self.file_path,
             "url": self.url,
             "archived_path": self.archived_path,
-            "metadata": self.metadata,
+            "metadata": self.doc_metadata,  # 输出时仍使用"metadata"键名
             "accessed_at": self.accessed_at.isoformat() if self.accessed_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
