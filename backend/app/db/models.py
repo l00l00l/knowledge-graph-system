@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean
 from sqlalchemy.sql import func
 import datetime
+import json
 from .sqlite_db import Base
 
 class Document(Base):

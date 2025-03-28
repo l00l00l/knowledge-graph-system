@@ -100,12 +100,15 @@
       
       <div v-if="loading" class="loading">
         <i class="fas fa-spinner fa-spin"></i>
-        <span>加载中...</span>
+        <span>加载中... ({{ documents.length }} 个文档)</span>
       </div>
       
       <div v-else-if="filteredDocuments.length === 0" class="no-documents">
         <i class="fas fa-file-alt"></i>
-        <p>暂无文档</p>
+        <p>暂无文档 (总文档数: {{ documents.length }})</p>
+        <button @click="fetchDocuments" class="btn">
+          <i class="fas fa-sync"></i> 重新加载
+        </button>
       </div>
       
       <table v-else class="documents-table">
@@ -247,6 +250,9 @@ export default {
   },
   computed: {
     filteredDocuments() {
+      console.log('Computing filteredDocuments, documents array:', this.documents);
+      console.log('Current document count:', this.documents?.length);
+      
       if (!Array.isArray(this.documents)) {
         console.error('documents is not an array:', this.documents);
         return [];
@@ -638,70 +644,55 @@ export default {
       console.log('Starting to fetch documents...');
       this.loading = true;
       
-      // 添加重试逻辑
-      const maxRetries = 3;
-      let retryCount = 0;
-      
-      while (retryCount < maxRetries) {
-        try {
-          const response = await fetch('/api/v1/documents', {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json'
-            },
-            // 添加缓存控制，避免浏览器缓存
-            cache: 'no-store'
-          });
-          
-          if (!response.ok) {
-            throw new Error(`服务器响应错误: ${response.status}`);
+      try {
+        const response = await fetch('/api/v1/documents', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
           }
-          
-          const data = await response.json();
-          console.log('Document data fetched successfully:', data);
-          
-          // 确保处理数据为数组类型
-          if (!Array.isArray(data)) {
-            console.error('API response is not an array:', data);
-            this.documents = [];
-          } else {
-            this.documents = data.map(doc => {
-              // 确保ID是字符串类型
-              if (doc && doc.id && typeof doc.id === 'object') {
-                return { ...doc, id: String(doc.id) };
-              }
-              return doc;
-            });
-          }
-          
-          // 如果成功，跳出循环
-          break;
-          
-        } catch (error) {
-          console.error(`Error fetching documents (attempt ${retryCount + 1})`, error);
-          retryCount++;
-          
-          // 最后一次尝试失败时显示错误
-          if (retryCount === maxRetries) {
-            // 只在UI上显示一次错误
-            if (!this.hasShownFetchError) {
-              alert('获取文档列表失败，请刷新页面重试');
-              this.hasShownFetchError = true;
-            }
-            this.documents = []; // 清空文档列表
-          } else {
-            // 等待一段时间后重试
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        } finally {
-          this.loading = false;
-          console.log('Document fetching complete.');
+        });
+        
+        if (!response.ok) {
+          throw new Error(`服务器响应错误: ${response.status}`);
         }
+        
+        // First, get the raw text to debug
+        const responseText = await response.text();
+        console.log('Raw API response:', responseText);
+        
+        // Parse it manually
+        let data;
+        try {
+          data = JSON.parse(responseText);
+          console.log('Parsed document data, length:', data.length);
+        } catch (e) {
+          console.error('Failed to parse JSON response:', e);
+          throw new Error('API返回了无效的JSON格式');
+        }
+        
+        // Explicitly set documents with the parsed data
+        if (Array.isArray(data)) {
+          this.documents = data;
+          console.log('Successfully set documents array, length:', this.documents.length);
+        } else {
+          console.error('API response is not an array:', data);
+          this.documents = [];
+        }
+      } catch (error) {
+        console.error('Error fetching documents:', error);
+        this.documents = []; // Clear documents on error
+      } finally {
+        this.loading = false;
+        console.log('Document fetch complete, loading set to false');
       }
     }
   },
   mounted() {
-    this.fetchDocuments();
+    console.log('Documents component mounted, fetching documents...');
+    this.fetchDocuments().catch(err => {
+      console.error('Error in mounted hook when fetching documents:', err);
+      this.loading = false;
+    });
   }
 };
 </script>
