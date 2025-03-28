@@ -164,7 +164,10 @@ class SpacyNERExtractor:
                             )
                             
                             # 手动设置source_id属性，避免构造函数中的命名冲突
-                            setattr(relationship, "source_id", document.id)
+                            document_id = document.id
+                            if isinstance(document_id, UUID):
+                                document_id = str(document_id)
+                            setattr(relationship, "source_id", document_id)
                             
                             # 添加到结果
                             relationships.append(relationship)

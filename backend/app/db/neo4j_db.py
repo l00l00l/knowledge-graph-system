@@ -38,6 +38,9 @@ class Neo4jDatabase(DatabaseInterface[T]):
         for k, v in props.items():
             if isinstance(v, (dict, list)):
                 props[k] = json.dumps(v)
+            # 添加UUID转换
+            elif isinstance(v, UUID):
+                props[k] = str(v)
         
         # 构建Cypher查询
         query = """
@@ -61,6 +64,9 @@ class Neo4jDatabase(DatabaseInterface[T]):
         for k, v in props.items():
             if isinstance(v, (dict, list)):
                 props[k] = json.dumps(v)
+            # 添加UUID转换
+            elif isinstance(v, UUID):
+                props[k] = str(v)
         
         # 构建Cypher查询
         query = """

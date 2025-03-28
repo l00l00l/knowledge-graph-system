@@ -241,7 +241,8 @@ export default {
       // 提取知识相关
       showExtractProgress: false,
       extractingDocument: null,
-      isExtracting: false
+      isExtracting: false,
+      hasShownFetchError: false,
     };
   },
   computed: {
@@ -372,6 +373,9 @@ export default {
             this.documents.unshift(result.document);
             uploadedFiles.push(result.document);
             console.log(`文件 ${file.name} 已存储在:`, result.document.file_path || result.document.archived_path);
+            console.log('Upload completed, forcing document list refresh');
+            this.documents = []; // 清空当前列表
+            await this.fetchDocuments(); // 重新获取
           }
         } catch (error) {
           console.error(`文件 ${file.name} 上传错误:`, error);
@@ -631,43 +635,68 @@ export default {
     
     // In the fetchDocuments method in Documents.vue, add more debugging and error handling
     async fetchDocuments() {
+      console.log('Starting to fetch documents...');
       this.loading = true;
       
-      try {
-        console.log('Fetching document list...');
-        const response = await fetch('/api/v1/documents', {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json'
+      // 添加重试逻辑
+      const maxRetries = 3;
+      let retryCount = 0;
+      
+      while (retryCount < maxRetries) {
+        try {
+          const response = await fetch('/api/v1/documents', {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json'
+            },
+            // 添加缓存控制，避免浏览器缓存
+            cache: 'no-store'
+          });
+          
+          if (!response.ok) {
+            throw new Error(`服务器响应错误: ${response.status}`);
           }
-        });
-        
-        console.log('API response status:', response.status);
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch document list: ${response.status}`);
+          
+          const data = await response.json();
+          console.log('Document data fetched successfully:', data);
+          
+          // 确保处理数据为数组类型
+          if (!Array.isArray(data)) {
+            console.error('API response is not an array:', data);
+            this.documents = [];
+          } else {
+            this.documents = data.map(doc => {
+              // 确保ID是字符串类型
+              if (doc && doc.id && typeof doc.id === 'object') {
+                return { ...doc, id: String(doc.id) };
+              }
+              return doc;
+            });
+          }
+          
+          // 如果成功，跳出循环
+          break;
+          
+        } catch (error) {
+          console.error(`Error fetching documents (attempt ${retryCount + 1})`, error);
+          retryCount++;
+          
+          // 最后一次尝试失败时显示错误
+          if (retryCount === maxRetries) {
+            // 只在UI上显示一次错误
+            if (!this.hasShownFetchError) {
+              alert('获取文档列表失败，请刷新页面重试');
+              this.hasShownFetchError = true;
+            }
+            this.documents = []; // 清空文档列表
+          } else {
+            // 等待一段时间后重试
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } finally {
+          this.loading = false;
+          console.log('Document fetching complete.');
         }
-        
-        // Parse response
-        const data = await response.json();
-        
-        // Process data and ensure IDs are strings
-        const processedData = data.map(doc => {
-          if (typeof doc.id === 'object') {
-            return { ...doc, id: String(doc.id) };
-          }
-          return doc;
-        });
-        
-        this.documents = processedData;
-        console.log(`Document list retrieved, total: ${this.documents.length}`);
-      } catch (error) {
-        console.error('Error fetching document list:', error);
-        alert('Failed to fetch document list: ' + error.message);
-        this.documents = []; // Clear the list to avoid showing stale data
-      } finally {
-        console.log('Setting loading state to false');
-        this.loading = false;
       }
     }
   },
