@@ -242,7 +242,7 @@ export default {
       showExtractProgress: false,
       extractingDocument: null,
       isExtracting: false,
-      hasShownFetchError: false,
+      hasShownFetchError: false
     };
   },
   computed: {

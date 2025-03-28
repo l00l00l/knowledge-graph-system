@@ -72,8 +72,8 @@ class MockKnowledgeExtractor:
 async def upload_document(
     file: UploadFile = File(...),
     extract_knowledge: bool = Form(False),
-    sqlite_db: Session = Depends(get_sqlite_db),  # SQLite依赖
-    neo4j_db: Neo4jDatabase = Depends(get_db)     # Neo4j依赖保持不变
+    sqlite_db: Session = Depends(get_sqlite_db),
+    neo4j_db: Neo4jDatabase = Depends(get_db)
 ):
     """上传文档并可选地提取知识"""
     try:
@@ -89,6 +89,19 @@ async def upload_document(
         if result.error:
             raise HTTPException(status_code=400, detail=f"Error processing document: {result.error}")
         
+        # 确保metadata是有效的JSON
+        metadata_json = "{}"
+        if result.document.metadata:
+            try:
+                # Make sure it's serializable
+                metadata_json = json.dumps(result.document.metadata)
+                # Verify it can be parsed back
+                json.loads(metadata_json)
+                print(f"Valid metadata JSON created: {metadata_json[:100]}...")
+            except Exception as e:
+                print(f"Error serializing metadata to JSON: {e}")
+                metadata_json = "{}"
+        
         # 将文档存入SQLite数据库
         doc_model = Document(
             id=str(result.document.id),
@@ -98,13 +111,23 @@ async def upload_document(
             file_path=result.document.file_path,
             url=result.document.url,
             archived_path=result.document.archived_path,
-            doc_metadata=json.dumps(result.document.metadata)  # 使用新的列名
+            doc_metadata=metadata_json  # 使用验证过的JSON
         )
         
         # 添加到数据库
         sqlite_db.add(doc_model)
         sqlite_db.commit()
         sqlite_db.refresh(doc_model)
+        
+        print(f"Document saved to SQLite with ID: {doc_model.id}")
+        
+        # 验证存储的JSON
+        verification = sqlite_db.query(Document).filter(Document.id == doc_model.id).first()
+        if verification:
+            print(f"Successfully verified document in database: {verification.title}")
+            print(f"Stored doc_metadata: {verification.doc_metadata[:100]}...")
+        else:
+            print(f"WARNING: Could not verify document {doc_model.id} in database")
         
         # 如果需要，提取知识
         entities = []
@@ -195,31 +218,40 @@ async def read_documents(
     limit: int = 100,
     document_type: Optional[str] = None,
     title: Optional[str] = Query(None, description="文档标题（支持模糊匹配）"),
-    sqlite_db: Session = Depends(get_sqlite_db)  # 只使用SQLite
+    sqlite_db: Session = Depends(get_sqlite_db)
 ):
     """获取文档列表，支持分页和过滤"""
-    # 查询SQLite数据库
-    query = sqlite_db.query(Document)
-    
-    # 应用过滤条件
-    if document_type:
-        query = query.filter(Document.type == document_type)
-    
-    if title:
-        query = query.filter(Document.title.like(f"%{title}%"))
-    
-    # 按创建时间降序排序
-    query = query.order_by(Document.created_at.desc())
-    
-    # 应用分页
-    query = query.offset(skip).limit(limit)
-    
-    # 获取结果
-    documents = query.all()
-    
-    # 转换为字典列表返回
-    return [doc.to_dict() for doc in documents]
-
+    try:
+        # 查询SQLite数据库
+        query = sqlite_db.query(Document)
+        
+        # 应用过滤条件
+        if document_type:
+            query = query.filter(Document.type == document_type)
+        
+        if title:
+            query = query.filter(Document.title.like(f"%{title}%"))
+        
+        # 按创建时间降序排序
+        query = query.order_by(Document.created_at.desc())
+        
+        # 应用分页
+        query = query.offset(skip).limit(limit)
+        
+        # 获取结果
+        documents = query.all()
+        print(f"Retrieved {len(documents)} documents from SQLite database")
+        
+        # 转换为字典列表返回
+        result = [doc.to_dict() for doc in documents]
+        print(f"Converted {len(result)} documents to dictionary format")
+        
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Error retrieving documents: {e}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving documents: {str(e)}")
 
 @router.get("/{document_id}", response_model=dict)
 async def read_document(
