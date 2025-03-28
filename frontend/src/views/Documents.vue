@@ -645,7 +645,7 @@ export default {
       this.loading = true;
       
       try {
-        const response = await fetch('/api/v1/documents', {
+        const response = await fetch('/api/v1/documents/', {
           method: 'GET',
           headers: {
             'Accept': 'application/json'
