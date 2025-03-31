@@ -117,7 +117,7 @@
             <th>标题</th>
             <th>类型</th>
             <th>上传时间</th>
-            <th>操作</th>
+            <th style="min-width: 120px; text-align: right;">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -129,6 +129,7 @@
             <td>{{ doc.type.toUpperCase() }}</td>
             <td>{{ formatDate(doc.created_at) }}</td>
             <td class="document-actions">
+              <!-- Remove any v-if conditions on these buttons -->
               <button @click="viewDocument(doc)" class="btn-action" title="预览">
                 <i class="fas fa-eye"></i>
               </button>
