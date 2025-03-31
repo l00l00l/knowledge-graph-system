@@ -287,32 +287,92 @@ async def preview_document(
         if not file_path or not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail="Document file not found")
         
-        # 读取文件内容
+        # 根据文件类型处理预览
+        file_type = document.type.lower()
         content = ""
-        try:
-            async with aiofiles.open(file_path, 'rb') as f:
-                binary_content = await f.read()
-                
-            # 尝试将内容解码为文本
+        preview_available = True
+        
+        # 文本文件处理
+        if file_type in ["txt", "text"]:
             try:
-                content = binary_content.decode('utf-8', errors='replace')
-            except UnicodeDecodeError:
-                content = f"[Binary content - {len(binary_content)} bytes]"
-                
-        except Exception as e:
-            content = f"Error reading file: {str(e)}"
+                async with aiofiles.open(file_path, 'rb') as f:
+                    binary_content = await f.read()
+                    
+                # 尝试将内容解码为文本
+                try:
+                    content = binary_content.decode('utf-8', errors='replace')
+                except UnicodeDecodeError:
+                    content = binary_content.decode('gbk', errors='replace')
+            except Exception as e:
+                content = f"Error reading file: {str(e)}"
+                preview_available = False
+        
+        # PDF文件处理
+        elif file_type == "pdf":
+            try:
+                # 使用同步方式处理PDF（因为PyPDF2不支持异步）
+                import PyPDF2
+                with open(file_path, 'rb') as f:
+                    pdf_reader = PyPDF2.PdfReader(f)
+                    text_content = []
+                    
+                    # 提取前5页或所有页面（如果少于5页）
+                    page_limit = min(5, len(pdf_reader.pages))
+                    for i in range(page_limit):
+                        page = pdf_reader.pages[i]
+                        text_content.append(f"==== 第 {i+1} 页 ====\n{page.extract_text()}")
+                    
+                    # 如果内容太长，进行截断
+                    content = "\n\n".join(text_content)
+                    if len(content) > 50000:
+                        content = content[:50000] + "...\n[内容过长，已截断]"
+                    
+                    if not content.strip():
+                        content = "[PDF 文件] 无法提取文本内容，可能是扫描件或图片PDF。"
+            except Exception as e:
+                content = f"[PDF 文件] 处理出错: {str(e)}"
+                preview_available = False
+        
+        # Word文档处理
+        elif file_type in ["docx", "doc"]:
+            if file_type == "docx":
+                try:
+                    # 使用python-docx处理docx文件
+                    import docx
+                    doc = docx.Document(file_path)
+                    
+                    # 提取段落文本
+                    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+                    
+                    # 如果段落太多，只取前100个
+                    if len(paragraphs) > 100:
+                        paragraphs = paragraphs[:100]
+                        paragraphs.append("...\n[内容过长，仅显示前100个段落]")
+                    
+                    content = "\n\n".join(paragraphs)
+                except Exception as e:
+                    content = f"[Word 文件] 处理出错: {str(e)}"
+                    preview_available = False
+            else:
+                # .doc格式不支持直接预览
+                content = "[Word(.doc) 文件] 无法预览旧版Word格式，请下载后查看。"
+                preview_available = False
+        
+        # 其他类型文件
+        else:
+            content = f"[{file_type.upper()} 文件] 未知文件类型，无法预览。"
+            preview_available = False
         
         return {
             "title": document.title,
             "type": document.type,
             "content": content,
-            "preview_available": True
+            "preview_available": preview_available
         }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error previewing document: {str(e)}")
-
 
 @router.get("/{document_id}/download")
 async def download_document(

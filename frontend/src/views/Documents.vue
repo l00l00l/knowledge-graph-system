@@ -158,16 +158,39 @@
           </button>
         </div>
         <div class="preview-body">
-          <div v-if="previewLoading" class="preview-loading">
-            <i class="fas fa-spinner fa-spin"></i>
-            <span>加载中...</span>
-          </div>
-          <div v-else-if="previewError" class="preview-error">
-            <i class="fas fa-exclamation-circle"></i>
-            <span>{{ previewError }}</span>
-          </div>
-          <pre v-else class="content-preview">{{ documentContent }}</pre>
+        <div v-if="previewLoading" class="preview-loading">
+          <i class="fas fa-spinner fa-spin"></i>
+          <span>加载中...</span>
         </div>
+        <div v-else-if="previewError" class="preview-error">
+          <i class="fas fa-exclamation-circle"></i>
+          <span>{{ previewError }}</span>
+        </div>
+        <div v-else-if="previewingDocument && previewingDocument.type.toLowerCase() === 'pdf'" class="pdf-preview">
+          <div class="pdf-content">
+            <pre class="content-preview">{{ documentContent }}</pre>
+          </div>
+          <div class="pdf-footer">
+            <p>PDF预览可能不完整。要查看完整内容，请下载文件。</p>
+          </div>
+        </div>
+        <div v-else-if="previewingDocument && ['docx', 'doc'].includes(previewingDocument.type.toLowerCase())" class="word-preview">
+          <div class="word-content">
+            <pre class="content-preview">{{ documentContent }}</pre>
+          </div>
+          <div class="word-footer">
+            <p>Word预览可能不完整。要查看完整格式，请下载文件。</p>
+          </div>
+        </div>
+        <div v-else-if="documentContent && documentContent.startsWith('[')" class="binary-preview">
+          <i :class="getPreviewIcon()"></i>
+          <p>{{ documentContent }}</p>
+          <button @click="downloadDocument(previewingDocument)" class="btn btn-primary">
+            <i class="fas fa-download"></i> 下载文件
+          </button>
+        </div>
+        <pre v-else class="content-preview">{{ documentContent }}</pre>
+      </div>
         <div class="preview-footer">
           <button @click="closePreview" class="btn">关闭</button>
           <button @click="downloadDocument(previewingDocument)" class="btn btn-primary">
@@ -609,6 +632,25 @@ export default {
       }
     },
     
+    // Add this method to your Vue component
+    getPreviewIcon() {
+      if (!this.previewingDocument) return 'fas fa-file';
+      
+      const type = this.previewingDocument.type.toLowerCase();
+      const iconMap = {
+        'pdf': 'fas fa-file-pdf fa-3x',
+        'docx': 'fas fa-file-word fa-3x',
+        'doc': 'fas fa-file-word fa-3x',
+        'ppt': 'fas fa-file-powerpoint fa-3x',
+        'pptx': 'fas fa-file-powerpoint fa-3x',
+        'xls': 'fas fa-file-excel fa-3x',
+        'xlsx': 'fas fa-file-excel fa-3x',
+        'txt': 'fas fa-file-alt fa-3x',
+      };
+      
+      return iconMap[type] || 'fas fa-file fa-3x';
+    },
+
     getDocumentIcon(type) {
       const iconMap = {
         'pdf': 'fas fa-file-pdf',
@@ -1197,5 +1239,47 @@ h2 {
 
 .btn-action.delete:hover {
   background-color: #ffcdd2;
+}
+
+.pdf-preview, .word-preview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.pdf-content, .word-content {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+.pdf-footer, .word-footer {
+  padding: 10px 0;
+  text-align: center;
+  font-style: italic;
+  color: #666;
+  border-top: 1px solid #eee;
+}
+
+.binary-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.binary-preview i {
+  font-size: 3rem;
+  margin-bottom: 20px;
+  color: #607d8b;
+}
+
+.binary-preview p {
+  margin-bottom: 20px;
+  font-size: 1.1rem;
 }
 </style>
