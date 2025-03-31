@@ -1130,35 +1130,72 @@ h2 {
   }
 }
 
-/* Add or update this CSS in the <style> section of Documents.vue */
-.documents-table td {
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 1px solid #eee;
-}
-
+/* Add this CSS to the <style> section of Documents.vue */
 .document-actions {
   display: flex;
-  gap: 5px;
-  min-width: 120px; /* Ensure minimum width for action buttons */
-  justify-content: flex-end; /* Align buttons to the right */
+  gap: 8px;
+  justify-content: flex-end;
+  min-width: 140px;
 }
 
 .btn-action {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 5px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-  visibility: visible; /* Explicitly set visibility */
-  opacity: 1; /* Ensure full opacity */
-  display: inline-flex; /* Better alignment */
+  display: flex;
   align-items: center;
   justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-color: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  color: #555;
+  transition: all 0.2s ease;
+}
+
+.btn-action:hover {
+  background-color: #e0e0e0;
+  color: #333;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .btn-action i {
-  font-size: 1rem; /* Ensure icon size is visible */
+  font-size: 14px;
+}
+
+/* Different colors for different action types */
+.btn-action.preview {
+  background-color: #e3f2fd;
+  color: #2196F3;
+}
+
+.btn-action.extract {
+  background-color: #e8f5e9;
+  color: #4CAF50;
+}
+
+.btn-action.download {
+  background-color: #fff3e0;
+  color: #FF9800;
+}
+
+.btn-action.delete {
+  background-color: #ffebee;
+  color: #F44336;
+}
+
+.btn-action.preview:hover {
+  background-color: #bbdefb;
+}
+
+.btn-action.extract:hover {
+  background-color: #c8e6c9;
+}
+
+.btn-action.download:hover {
+  background-color: #ffe0b2;
+}
+
+.btn-action.delete:hover {
+  background-color: #ffcdd2;
 }
 </style>
