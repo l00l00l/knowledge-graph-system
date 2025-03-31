@@ -117,7 +117,7 @@
             <th>标题</th>
             <th>类型</th>
             <th>上传时间</th>
-            <th style="min-width: 120px; text-align: right;">操作</th>
+            <th style="min-width: 150px; text-align: right;">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -1128,5 +1128,37 @@ h2 {
   .progress-content {
     width: 90%;
   }
+}
+
+/* Add or update this CSS in the <style> section of Documents.vue */
+.documents-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.document-actions {
+  display: flex;
+  gap: 5px;
+  min-width: 120px; /* Ensure minimum width for action buttons */
+  justify-content: flex-end; /* Align buttons to the right */
+}
+
+.btn-action {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  visibility: visible; /* Explicitly set visibility */
+  opacity: 1; /* Ensure full opacity */
+  display: inline-flex; /* Better alignment */
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-action i {
+  font-size: 1rem; /* Ensure icon size is visible */
 }
 </style>
