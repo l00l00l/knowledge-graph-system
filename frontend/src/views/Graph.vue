@@ -30,6 +30,19 @@
       
       <div class="graph-area">
         <div class="graph-container" ref="graphContainer"></div>
+        
+        <!-- Add graph controls -->
+        <div class="graph-controls">
+          <button @click="zoomIn" title="放大">
+            <i class="fas fa-search-plus"></i>
+          </button>
+          <button @click="zoomOut" title="缩小">
+            <i class="fas fa-search-minus"></i>
+          </button>
+          <button @click="resetView" title="重置视图">
+            <i class="fas fa-home"></i>
+          </button>
+        </div>
       </div>
       
       <div class="detail-panel" v-if="selectedEntity">
@@ -165,7 +178,9 @@
     },
     methods: {
       togglePanel() {
+        console.log(`Toggle panel - current state is ${this.isPanelCollapsed ? 'collapsed' : 'expanded'}`);
         this.isPanelCollapsed = !this.isPanelCollapsed;
+        console.log(`Panel is now ${this.isPanelCollapsed ? 'collapsed' : 'expanded'}`);
       },
       
       filterNodes() {
@@ -461,13 +476,6 @@
               .attr('transform', d => `translate(${d.x}, ${d.y})`);
           });
         
-        // Add reset view button
-        const resetButton = document.createElement('button');
-        resetButton.innerHTML = '<i class="fas fa-home"></i>';
-        resetButton.className = 'reset-button';
-        resetButton.addEventListener('click', this.resetView);
-        container.appendChild(resetButton);
-        
         // Center the graph initially
         this.resetView();
       },
@@ -504,6 +512,20 @@
         );
       },
 
+      zoomIn() {
+        if (!this.svg || !this.zoom) return;
+        this.svg.transition().duration(300).call(
+          this.zoom.scaleBy, 1.3
+        );
+      },
+
+      zoomOut() {
+        if (!this.svg || !this.zoom) return;
+        this.svg.transition().duration(300).call(
+          this.zoom.scaleBy, 0.7
+        );
+      },
+
       getNodeColor(type) {
         const colorMap = {
           'person': '#ff7f0e',
@@ -529,6 +551,7 @@
         this.updateVisualization();
       }
     }
+
   };
   </script>
   
@@ -559,14 +582,21 @@
     align-items: center;
     padding: 15px;
     border-bottom: 1px solid var(--border-color);
+    min-width: 50px;
   }
   
   .toggle-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
     background: none;
     border: none;
     font-size: 1rem;
     cursor: pointer;
     color: var(--text-color);
+    z-index: 10;
   }
   
   .panel-content {
@@ -649,10 +679,7 @@
     font-style: italic;
   }
   
-  .graph-container::after {
-    content: 'Graph visualization will be rendered here';
-    font-size: 1.2rem;
-  }
+
   
   .detail-panel {
     position: relative;
@@ -916,6 +943,51 @@
 
   .link-label {
     pointer-events: none;
+  }
+
+  .graph-controls {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 10;
+  }
+
+  .graph-controls button {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: white;
+    border: 1px solid #ddd;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .graph-controls button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  }
+
+  .control-panel.collapsed .panel-content {
+    display: none;
+  }
+
+  /* Ensure toggle button always visible and styled properly */
+  
+
+  .toggle-button:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 50%;
+  }
+
+  .control-panel.collapsed .panel-header h2 {
+    display: none; /* Hide title when collapsed but keep toggle button */
   }
   }
   </style>
