@@ -31,7 +31,7 @@
       <div class="graph-area">
         <div class="graph-container" ref="graphContainer"></div>
         
-        <!-- Add graph controls -->
+        <!-- Make sure this div is present and correctly positioned -->
         <div class="graph-controls">
           <button @click="zoomIn" title="放大">
             <i class="fas fa-search-plus"></i>
@@ -44,7 +44,7 @@
           </button>
         </div>
       </div>
-      
+            
       <div class="detail-panel" v-if="selectedEntity">
         <div class="entity-detail-container">
           <div v-if="selectedEntity" class="entity-card">
@@ -499,19 +499,7 @@
          d.fy = null;
       },
 
-      resetView() {
-        if (!this.svg || !this.zoom) return;
-        
-        const container = this.$refs.graphContainer;
-        const width = container.clientWidth;
-        const height = container.clientHeight;
-        
-        this.svg.transition().duration(750).call(
-          this.zoom.transform,
-          d3.zoomIdentity.translate(width/2, height/2).scale(0.8)
-        );
-      },
-
+      // Make sure these methods are included in your methods section
       zoomIn() {
         if (!this.svg || !this.zoom) return;
         this.svg.transition().duration(300).call(
@@ -523,6 +511,19 @@
         if (!this.svg || !this.zoom) return;
         this.svg.transition().duration(300).call(
           this.zoom.scaleBy, 0.7
+        );
+      },
+
+      resetView() {
+        if (!this.svg || !this.zoom) return;
+        
+        const container = this.$refs.graphContainer;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        
+        this.svg.transition().duration(750).call(
+          this.zoom.transform,
+          d3.zoomIdentity.translate(width/2, height/2).scale(0.8)
         );
       },
 
@@ -574,6 +575,7 @@
   
   .control-panel.collapsed {
     width: 50px;
+    overflow: visible;
   }
   
   .panel-header {
@@ -583,6 +585,8 @@
     padding: 15px;
     border-bottom: 1px solid var(--border-color);
     min-width: 50px;
+    position: relative;
+
   }
   
   .toggle-button {
@@ -861,10 +865,6 @@
       border-bottom: 1px solid var(--border-color);
     }
     
-    .control-panel.collapsed {
-      width: 100%;
-      height: 50px;
-    }
     
     .panel-content {
       padding: 10px;
@@ -952,7 +952,11 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    z-index: 10;
+    z-index: 100; /* Increase z-index to ensure visibility */
+    background-color: rgba(255, 255, 255, 0.8); /* Add background to make buttons stand out */
+    padding: 5px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   }
 
   .graph-controls button {
@@ -961,17 +965,19 @@
     border-radius: 50%;
     background-color: white;
     border: 1px solid #ddd;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
+    font-size: 14px; /* Ensure icons are large enough */
+    color: #333; /* Make icons visible */
   }
 
   .graph-controls button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    background-color: #f0f0f0;
   }
 
   .control-panel.collapsed .panel-content {
@@ -988,6 +994,12 @@
 
   .control-panel.collapsed .panel-header h2 {
     display: none; /* Hide title when collapsed but keep toggle button */
+  }
+
+  .control-panel.collapsed .toggle-button {
+    position: absolute;
+    right: 10px;
+    top: 15px;
   }
   }
   </style>
