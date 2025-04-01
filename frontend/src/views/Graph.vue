@@ -372,7 +372,8 @@
           .append('svg')
           .attr('width', width)
           .attr('height', height)
-          .attr('class', 'graph-svg');
+          .attr('class', 'graph-svg')
+          .style('position', 'absolute');
         
         // Add zoom functionality
         const zoom = d3.zoom()
@@ -480,6 +481,46 @@
         this.resetView();
       },
 
+      addGraphControls() {
+        const graphArea = this.$el.querySelector('.graph-area');
+        if (!graphArea) return;
+        
+        // Check if controls already exist
+        let controls = graphArea.querySelector('.graph-controls');
+        if (controls) return;
+        
+        // Create controls container
+        controls = document.createElement('div');
+        controls.className = 'graph-controls';
+        
+        // Create zoom in button
+        const zoomInBtn = document.createElement('button');
+        zoomInBtn.innerHTML = '<i class="fas fa-search-plus"></i>';
+        zoomInBtn.title = '放大';
+        zoomInBtn.addEventListener('click', this.zoomIn);
+        
+        // Create zoom out button
+        const zoomOutBtn = document.createElement('button');
+        zoomOutBtn.innerHTML = '<i class="fas fa-search-minus"></i>';
+        zoomOutBtn.title = '缩小';
+        zoomOutBtn.addEventListener('click', this.zoomOut);
+        
+        // Create reset button
+        const resetBtn = document.createElement('button');
+        resetBtn.innerHTML = '<i class="fas fa-home"></i>';
+        resetBtn.title = '重置视图';
+        resetBtn.addEventListener('click', this.resetView);
+        
+        // Add buttons to controls
+        controls.appendChild(zoomInBtn);
+        controls.appendChild(zoomOutBtn);
+        controls.appendChild(resetBtn);
+        
+        // Add controls to graph area
+        graphArea.appendChild(controls);
+        
+        console.log('Graph controls added programmatically');
+      },
       // Add these helper methods
       dragStarted(event, d) {
         if (!event.active) this.simulation.alphaTarget(0.3).restart();
@@ -543,6 +584,9 @@
       console.log('Graph component mounted, fetching graph data...');
       this.fetchGraphData();
       window.addEventListener('resize', this.handleResize);
+      this.$nextTick(() => {
+        this.addGraphControls();
+      })
     },
     beforeUnmount() {
       window.removeEventListener('resize', this.handleResize);
@@ -952,16 +996,17 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    z-index: 100; /* Increase z-index to ensure visibility */
-    background-color: rgba(255, 255, 255, 0.8); /* Add background to make buttons stand out */
-    padding: 5px;
+    z-index: 1000;  /* Significantly higher z-index */
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 8px;
     border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);  /* More visible shadow */
+    pointer-events: auto;  /* Ensure clicks are detected */
   }
 
   .graph-controls button {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     background-color: white;
     border: 1px solid #ddd;
@@ -970,8 +1015,8 @@
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
-    font-size: 14px; /* Ensure icons are large enough */
-    color: #333; /* Make icons visible */
+    font-size: 16px;  /* Larger icon size */
+    color: #333;
   }
 
   .graph-controls button:hover {
