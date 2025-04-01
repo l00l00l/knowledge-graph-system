@@ -584,9 +584,6 @@
       console.log('Graph component mounted, fetching graph data...');
       this.fetchGraphData();
       window.addEventListener('resize', this.handleResize);
-      this.$nextTick(() => {
-        this.addGraphControls();
-      })
     },
     beforeUnmount() {
       window.removeEventListener('resize', this.handleResize);
