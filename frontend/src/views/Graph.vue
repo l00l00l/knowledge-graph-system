@@ -257,6 +257,10 @@
         // In a real app, this might expand the graph visualization
       },
       
+      handleResize() {
+        console.log('Window resized, reinitializing visualization');
+        this.initVisualization();
+      },
 
       async fetchGraphData() {
         try {
@@ -290,6 +294,19 @@
       initVisualization() {
         // Clear previous visualization
         const container = this.$refs.graphContainer;
+        this.svg = d3.select(container)
+          .append('svg')
+          .attr('width', width)
+          .attr('height', height)
+          .attr('class', 'graph-svg');
+
+        this.zoom = d3.zoom()
+          .scaleExtent([0.1, 4])
+          .on('zoom', (event) => {
+            g.attr('transform', event.transform);
+          });
+
+        this.svg.call(this.zoom);
         if (!container) {
           console.error('Graph container not found');
           return;
@@ -444,15 +461,15 @@
         d.fy = event.y;
       },
 
-      dragEnded(event, d) {
+      dragEnded(event,d) {
         if (!event.active) this.simulation.alphaTarget(0);
         // Keep nodes fixed where they're dragged
-        // d.fx = null;
-        // d.fy = null;
+         d.fx = null;
+         d.fy = null;
       },
 
       resetView() {
-        if (!this.svg) return;
+        if (!this.svg || !this.zoom) return;
         
         const container = this.$refs.graphContainer;
         const width = container.clientWidth;
@@ -478,7 +495,7 @@
     },
     mounted() {
       console.log('Graph component mounted, fetching graph data...');
-      this.initVisualization();
+      this.fetchGraphData();
       window.addEventListener('resize', this.handleResize);
     },
     beforeUnmount() {

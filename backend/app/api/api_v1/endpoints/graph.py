@@ -6,7 +6,7 @@ from app.api.deps import get_db
 router = APIRouter()
 
 @router.get("/", response_model=Dict[str, Any])
-async def get_knowledge_graph(db: Neo4jEnhanced = Depends(get_db)):
+async def get_knowledge_graph(db: Neo4jDatabase = Depends(get_db)):
     """获取整个知识图谱数据用于可视化"""
     try:
         # 查询所有实体
@@ -25,9 +25,15 @@ async def get_knowledge_graph(db: Neo4jEnhanced = Depends(get_db)):
         LIMIT 200
         """
         
-        # 执行查询
-        nodes_result = await db.execute_read_query(entity_query)
-        links_result = await db.execute_read_query(relation_query)
+        # 创建会话并执行查询
+        async with db.driver.session(database=db.database) as session:
+            # 执行实体查询
+            nodes_result = await session.run(entity_query)
+            nodes_data = await nodes_result.data()
+            
+            # 执行关系查询
+            links_result = await session.run(relation_query)
+            links_data = await links_result.data()
         
         # 处理结果
         nodes = [
@@ -37,7 +43,7 @@ async def get_knowledge_graph(db: Neo4jEnhanced = Depends(get_db)):
                 "type": node["type"] or "entity",
                 "description": node["description"] or ""
             }
-            for node in nodes_result
+            for node in nodes_data
         ]
         
         links = [
@@ -47,7 +53,7 @@ async def get_knowledge_graph(db: Neo4jEnhanced = Depends(get_db)):
                 "target": link["target"],
                 "type": link["type"]
             }
-            for link in links_result
+            for link in links_data
         ]
         
         return {
