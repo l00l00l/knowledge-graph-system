@@ -329,19 +329,7 @@
       initVisualization() {
         // Clear previous visualization
         const container = this.$refs.graphContainer;
-        this.svg = d3.select(container)
-          .append('svg')
-          .attr('width', width)
-          .attr('height', height)
-          .attr('class', 'graph-svg');
-
-        this.zoom = d3.zoom()
-          .scaleExtent([0.1, 4])
-          .on('zoom', (event) => {
-            g.attr('transform', event.transform);
-          });
-
-        this.svg.call(this.zoom);
+        
         if (!container) {
           console.error('Graph container not found');
           return;
