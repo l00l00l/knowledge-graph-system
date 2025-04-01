@@ -267,17 +267,49 @@
           console.log('Fetching graph data...');
           this.loading = true;
           
+          // First test if API is accessible
+          try {
+            console.log('Testing graph API endpoint...');
+            const testResponse = await fetch('/api/v1/graph/test');
+            console.log('Test response status:', testResponse.status);
+            
+            if (testResponse.ok) {
+              const testData = await testResponse.json();
+              console.log('Test endpoint response:', testData);
+            } else {
+              console.error('Test endpoint failed:', await testResponse.text());
+            }
+          } catch (testError) {
+            console.error('Test endpoint error:', testError);
+          }
+          
+          // Now try the actual data endpoint
+          console.log('Fetching actual graph data...');
           const response = await fetch('/api/v1/graph');
           console.log('Response status:', response.status);
           
           if (!response.ok) {
             const errorText = await response.text();
-            console.error('Error response:', errorText);
-            throw new Error(`Failed to fetch graph data: ${response.status} - ${errorText}`);
+            console.error('Error response text:', errorText);
+            throw new Error(`Failed to fetch graph data: ${response.status} - ${errorText || 'No error details'}`);
           }
           
           const data = await response.json();
           console.log('Graph data received:', data);
+          
+          // Handle empty result gracefully
+          if (!data.nodes || data.nodes.length === 0) {
+            console.log('No nodes found in database');
+            // Still set empty arrays to avoid errors
+            this.nodes = [];
+            this.relationships = [];
+            // Display empty graph with message
+            const container = this.$refs.graphContainer;
+            if (container) {
+              container.innerHTML = '<div class="empty-graph-message"><i class="fas fa-info-circle"></i><p>知识图谱为空，请先通过文档提取知识</p></div>';
+            }
+            return;
+          }
           
           // Update the local data
           this.nodes = data.nodes || [];
