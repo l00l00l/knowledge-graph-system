@@ -517,23 +517,112 @@ async def download_document(
         raise HTTPException(status_code=500, detail=f"Error downloading document: {str(e)}")
 
 
-@router.post("/{document_id}/extract", response_model=dict)
+@router.post("/{document_id}/extract", response_model=Dict[str, Any])
 async def extract_knowledge(
-    document_id: UUID,
-    db: Neo4jDatabase = Depends(get_db)
+    document_id: str,
+    sqlite_db: Session = Depends(get_sqlite_db),
+    neo4j_db: Neo4jDatabase = Depends(get_db)
 ):
     """从文档提取知识"""
-    # Find in mock documents
-    for doc in mock_documents:
-        if doc.id == document_id:
-            return {
-                "document_id": str(document_id),
-                "extracted_entities": 0,
-                "extracted_relationships": 0,
-                "message": "Knowledge extraction would be performed here"
-            }
-    
-    raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        # 获取文档
+        document = sqlite_db.query(Document).filter(Document.id == document_id).first()
+        
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # 获取文档文件路径
+        file_path = document.file_path
+        if not file_path or not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Document file not found")
+        
+        # 读取文档内容
+        content = ""
+        try:
+            # 读取文件内容（根据文件类型处理）
+            file_type = document.type.lower()
+            
+            # 文本文件
+            if file_type in ["txt", "text"]:
+                async with aiofiles.open(file_path, 'rb') as f:
+                    binary_content = await f.read()
+                
+                try:
+                    content = binary_content.decode('utf-8', errors='replace')
+                except UnicodeDecodeError:
+                    content = binary_content.decode('gbk', errors='replace')
+            
+            # PDF文件
+            elif file_type == "pdf":
+                import PyPDF2
+                with open(file_path, 'rb') as f:
+                    pdf_reader = PyPDF2.PdfReader(f)
+                    for page in pdf_reader.pages:
+                        content += page.extract_text() + "\n\n"
+            
+            # Word文件
+            elif file_type == "docx":
+                import docx
+                doc = docx.Document(file_path)
+                content = "\n\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+            
+            # 其他文件类型
+            else:
+                # 尝试作为文本读取
+                try:
+                    async with aiofiles.open(file_path, 'rb') as f:
+                        binary_content = await f.read()
+                    content = binary_content.decode('utf-8', errors='replace')
+                except:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"Unsupported file type for knowledge extraction: {file_type}"
+                    )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Error reading document content: {str(e)}"
+            )
+        
+        # 创建知识抽取器
+        extractor = SpacyNERExtractor(neo4j_db)
+        
+        # 创建文档对象
+        source_document = SourceDocument(
+            id=UUID(document.id),
+            title=document.title,
+            type=document.type,
+            content_hash=document.content_hash,
+            file_path=document.file_path,
+            url=document.url,
+            archived_path=document.archived_path,
+            metadata=json.loads(document.doc_metadata) if document.doc_metadata else {}
+        )
+        
+        # 提取实体
+        entities = await extractor.extract_entities(source_document, content)
+        
+        # 提取关系
+        relationships = []
+        if len(entities) >= 2:
+            relationships = await extractor.extract_relationships(source_document, entities, content)
+        
+        # 创建溯源记录
+        if entities or relationships:
+            await extractor.create_knowledge_traces(source_document, entities, relationships, content)
+        
+        return {
+            "document_id": document_id,
+            "extracted_entities": len(entities),
+            "extracted_relationships": len(relationships),
+            "message": f"成功从文档中提取出 {len(entities)} 个实体和 {len(relationships)} 个关系。"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"知识提取失败: {str(e)}")
 
 
 @router.get("/{document_id}/export")
