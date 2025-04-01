@@ -52,7 +52,27 @@ async def root():
 async def startup_event():
     """应用启动事件处理"""
     logger.info("初始化应用...")
-    # 这里可以添加初始化代码，如数据库连接测试等
+    
+    # 测试Neo4j连接
+    from app.core.config import settings
+    from app.db.neo4j_db import Neo4jDatabase
+    
+    db = Neo4jDatabase(
+        uri=settings.NEO4J_URI,
+        user=settings.NEO4J_USER,
+        password=settings.NEO4J_PASSWORD,
+        database=settings.NEO4J_DATABASE
+    )
+    
+    try:
+        connection_result = await db.test_connection()
+        if connection_result:
+            logger.info("Neo4j连接测试成功")
+        else:
+            logger.error("Neo4j连接测试失败!")
+    except Exception as e:
+        logger.error(f"Neo4j连接测试出错: {e}")
+    
     logger.info("应用初始化完成")
 
 

@@ -13,8 +13,17 @@ class Neo4jDatabase(DatabaseInterface[T]):
     """Neo4j图数据库实现"""
     
     def __init__(self, uri: str, user: str, password: str, database: str = "neo4j"):
-        self.driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
+        """初始化Neo4j数据库连接"""
+        self.uri = uri
+        self.user = user
+        self.password = password
         self.database = database
+        self.driver = AsyncGraphDatabase.driver(
+            uri, 
+            auth=(user, password),
+            max_connection_lifetime=3600
+        )
+        print(f"Initialized Neo4j connection to {uri} with user {user} and database {database}")
     
     async def close(self):
         await self.driver.close()
@@ -42,16 +51,25 @@ class Neo4jDatabase(DatabaseInterface[T]):
             elif isinstance(v, UUID):
                 props[k] = str(v)
         
-        # 构建Cypher查询
+        # 构建Cypher查询 - 修复实体创建查询
         query = """
-        CREATE (e:`Entity`:`%s` $props) 
+        CREATE (e:Entity {props}) 
+        SET e:%s 
         RETURN e
         """ % entity.type
         
-        async with self.driver.session(database=self.database) as session:
-            result = await session.run(query, props=props)
-            record = await result.single()
-            return entity
+        try:
+            async with self.driver.session(database=self.database) as session:
+                result = await session.run(query, props=props)
+                record = await result.single()
+                if record:
+                    print(f"Successfully created entity: {entity.name}")
+                else:
+                    print(f"Warning: No record returned when creating entity: {entity.name}")
+                return entity
+        except Exception as e:
+            print(f"Error in _create_entity: {e}")
+            raise e
     
     async def _create_relationship(self, relationship: Relationship) -> Relationship:
         """创建关系边"""
@@ -68,11 +86,11 @@ class Neo4jDatabase(DatabaseInterface[T]):
             elif isinstance(v, UUID):
                 props[k] = str(v)
         
-        # 构建Cypher查询
+        # 构建Cypher查询 - 修复关系创建查询
         query = """
         MATCH (source:Entity {id: $source_id})
         MATCH (target:Entity {id: $target_id})
-        CREATE (source)-[r:`%s` $props]->(target)
+        CREATE (source)-[r:%s $props]->(target)
         RETURN r
         """ % relationship.type
         
@@ -82,11 +100,18 @@ class Neo4jDatabase(DatabaseInterface[T]):
             "props": props
         }
         
-        async with self.driver.session(database=self.database) as session:
-            result = await session.run(query, **params)
-            record = await result.single()
-            return relationship
-    
+        try:
+            async with self.driver.session(database=self.database) as session:
+                result = await session.run(query, **params)
+                record = await result.single()
+                if record:
+                    print(f"Successfully created relationship of type {relationship.type}")
+                else:
+                    print(f"Warning: No record returned when creating relationship of type {relationship.type}")
+                return relationship
+        except Exception as e:
+            print(f"Error in _create_relationship: {e}")
+            raise e
     async def read(self, id: UUID) -> Optional[T]:
         """读取实体或关系"""
         # 这里需要实现具体的读取逻辑
@@ -111,3 +136,16 @@ class Neo4jDatabase(DatabaseInterface[T]):
         """查找实体或关系"""
         # 这里需要实现具体的查找逻辑
         pass
+
+    async def test_connection(self) -> bool:
+        """测试Neo4j连接"""
+        try:
+            async with self.driver.session(database=self.database) as session:
+                result = await session.run("RETURN 1 AS test")
+                record = await result.single()
+                return record and record["test"] == 1
+        except Exception as e:
+            print(f"Neo4j connection test failed: {e}")
+            return False
+        
+    

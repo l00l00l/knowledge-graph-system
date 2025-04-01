@@ -188,6 +188,8 @@
         this.entityRelationships = this.getMockRelationships(entity.id);
       },
       
+
+
       getMockRelationships(entityId) {
         // Generate mock relationships for demo purposes
         const rels = [];
@@ -252,25 +254,66 @@
         // In a real app, this might expand the graph visualization
       },
       
-      initVisualization() {
-        // In a real app, we would initialize the graph visualization
-        // using the GraphViewer component or D3.js directly
-        console.log('Initializing graph visualization...');
-        
-        // For now, just log that we would initialize the visualization
-        // with the filtered nodes and relationships
-        console.log('Graph would show:', this.filteredNodes.length, 'nodes and', this.filteredRelationships.length, 'relationships');
-        
-        // Set default filters to all entity types
-        this.activeFilters = [...this.entityTypes];
+
+      async fetchGraphData() {
+        try {
+          console.log('Fetching graph data...');
+          this.loading = true;
+          
+          const response = await fetch('/api/v1/graph');
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch graph data: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          console.log('Graph data received:', data);
+          
+          // Update the local data
+          this.nodes = data.nodes;
+          this.relationships = data.links;
+          
+          // Initialize visualization with the new data
+          this.initVisualization();
+          
+        } catch (error) {
+          console.error('Error fetching graph data:', error);
+          alert('获取图谱数据失败: ' + error.message);
+        } finally {
+          this.loading = false;
+        }
       },
-      
-      handleResize() {
-        // In a real app, we would resize the visualization
-        console.log('Handling resize event...');
+
+      initVisualization() {
+        // Make sure the container is available
+        const container = this.$refs.graphContainer;
+        if (!container) {
+          console.error('Graph container not found');
+          return;
+        }
+        
+        // Create visualization with D3
+        if (this.nodes.length === 0) {
+          console.log('No nodes to display in graph');
+          return;
+        }
+        
+        // Display an indicator if graph is empty
+        if (this.nodes.length === 0) {
+          const emptyMessage = document.createElement('div');
+          emptyMessage.className = 'empty-graph-message';
+          emptyMessage.innerHTML = '<i class="fas fa-info-circle"></i><p>知识图谱为空，请先通过文档提取知识</p>';
+          container.appendChild(emptyMessage);
+          return;
+        }
+        
+        // Update your visualization logic here
+        // This will depend on your specific D3 implementation
+        // ...
       }
     },
     mounted() {
+      console.log('Graph component mounted, fetching graph data...');
       this.initVisualization();
       window.addEventListener('resize', this.handleResize);
     },
@@ -616,6 +659,20 @@
   @media (max-width: 768px) {
     .graph-area {
       height: 50vh;
+    }
+
+  .empty-graph-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #999;
+    }
+
+  .empty-graph-message i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
     }
   }
   </style>
