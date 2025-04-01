@@ -87,7 +87,62 @@
               </button>
             </div>
           </div>
+          <div v-if="isEditing" class="edit-modal">
+            <div class="edit-modal-content">
+              <div class="edit-modal-header">
+                <h3>编辑实体</h3>
+                <button @click="cancelEdit" class="close-btn">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+              
+              <div class="edit-modal-body">
+                <div class="form-group">
+                  <label>名称</label>
+                  <input type="text" v-model="editFormData.name" class="form-input">
+                </div>
+                
+                <div class="form-group">
+                  <label>类型</label>
+                  <select v-model="editFormData.type" class="form-input">
+                    <option value="concept">概念</option>
+                    <option value="person">人物</option>
+                    <option value="organization">组织</option>
+                    <option value="location">地点</option>
+                    <option value="time">时间</option>
+                    <option value="event">事件</option>
+                  </select>
+                </div>
+                
+                <div class="form-group">
+                  <label>描述</label>
+                  <textarea v-model="editFormData.description" class="form-input" rows="3"></textarea>
+                </div>
+                
+                <div class="form-group">
+                  <label>属性</label>
+                  <button @click="addEntityProperty" class="add-property-btn">
+                    <i class="fas fa-plus"></i> 添加属性
+                  </button>
+                  
+                  <div v-for="(value, key) in editFormData.properties" :key="key" class="property-edit-row">
+                    <div class="property-key">{{ key }}:</div>
+                    <input type="text" v-model="editFormData.properties[key]" class="property-value-input">
+                    <button @click="removeEntityProperty(key)" class="remove-property-btn">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="edit-modal-footer">
+                <button @click="cancelEdit" class="btn cancel-btn">取消</button>
+                <button @click="saveEntityChanges" class="btn save-btn">保存</button>
+              </div>
+            </div>
+          </div>
         </div>
+        <!-- Entity Edit Form Modal -->
         
         <button class="close-detail" @click="clearSelection">
           <i class="fas fa-times"></i>
@@ -112,6 +167,9 @@
         simulation: null,
         svg: null,
         zoom: null,
+        isEditing: false,
+        editingEntity: null,
+        editFormData: {},
         // Mock nodes data for testing
         nodes: [
           { id: 'n1', name: '知识图谱', type: 'concept', description: '知识图谱是一种表示知识的图结构', properties: { domain: '人工智能', popularity: '高' } },
@@ -246,9 +304,16 @@
       
       editEntity() {
         console.log('Edit entity:', this.selectedEntity);
-        // In a real app, this would open an edit dialog
+        this.isEditing = true;
+        this.editingEntity = JSON.parse(JSON.stringify(this.selectedEntity)); // Create a deep copy
+        this.editFormData = {
+          name: this.selectedEntity.name,
+          type: this.selectedEntity.type,
+          description: this.selectedEntity.description || '',
+          properties: {...this.selectedEntity.properties}
+        };
       },
-      
+            
       traceKnowledge() {
         console.log('Trace knowledge for:', this.selectedEntity);
         // In a real app, this would navigate to a knowledge trace page
@@ -465,7 +530,77 @@
           });
         
       },
+      saveEntityChanges() {
+        console.log('Saving entity changes');
+        
+        // Prepare the updated entity data
+        const updatedEntity = {
+          ...this.editingEntity,
+          name: this.editFormData.name,
+          type: this.editFormData.type,
+          description: this.editFormData.description,
+          properties: this.editFormData.properties
+        };
+        
+        // Call API to update entity
+        fetch(`/api/v1/entities/${this.editingEntity.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updatedEntity)
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to update entity');
+          }
+          return response.json();
+        })
+        .then(data => {
+          // Update the entity in the graph
+          const index = this.nodes.findIndex(node => node.id === data.id);
+          if (index !== -1) {
+            this.nodes[index] = data;
+          }
+          
+          // Update selected entity
+          this.selectedEntity = data;
+          
+          // Reset edit mode
+          this.isEditing = false;
+          this.editingEntity = null;
+          
+          // Reinitialize visualization
+          this.updateVisualization();
+          
+          // Show success message
+          alert('实体更新成功');
+        })
+        .catch(error => {
+          console.error('Error updating entity:', error);
+          alert('更新失败: ' + error.message);
+        });
+      },
 
+      cancelEdit() {
+        this.isEditing = false;
+        this.editingEntity = null;
+      },
+
+      addEntityProperty() {
+        const key = prompt('请输入属性名称:');
+        if (key && key.trim()) {
+          this.editFormData.properties[key.trim()] = '';
+        }
+      },
+
+      removeEntityProperty(key) {
+        if (confirm(`确定要删除属性 "${key}" 吗?`)) {
+          const updatedProperties = {...this.editFormData.properties};
+          delete updatedProperties[key];
+          this.editFormData.properties = updatedProperties;
+        }
+      },
       // Add these helper methods
       dragStarted(event, d) {
         if (!event.active) this.simulation.alphaTarget(0.3).restart();
@@ -655,14 +790,26 @@
     position: absolute;
     top: 10px;
     right: 10px;
-    background: none;
-    border: none;
+    width: 32px;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.8); /* Add background to prevent overlap */
+    border: 1px solid #eee;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 1rem;
     cursor: pointer;
-    color: var(--text-color);
-    z-index: 10;
-  }
+    color: #666;
+    z-index: 20; /* Ensure it's above other content */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
   
+  .close-detail:hover {
+    background: #f5f5f5;
+    color: #333;
+    }
+
   .entity-detail-container {
     height: 100%;
     overflow-y: auto;
@@ -677,7 +824,7 @@
   }
   
   .entity-header {
-    padding: 16px;
+    padding: 16px 50px 16px 16px;
     border-bottom: 1px solid #eee;
     display: flex;
     justify-content: space-between;
@@ -923,6 +1070,118 @@
     position: absolute;
     right: 10px;
     top: 15px;
+  }
+    /* Edit modal styles */
+  .edit-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  .edit-modal-content {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    width: 500px;
+    max-width: 90%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .edit-modal-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .edit-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    max-height: 60vh;
+  }
+
+  .edit-modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .form-group {
+    margin-bottom: 15px;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+  }
+
+  .form-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .property-edit-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .property-key {
+    width: 120px;
+    font-weight: 500;
+  }
+
+  .property-value-input {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .add-property-btn {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    margin-bottom: 10px;
+  }
+
+  .remove-property-btn {
+    background: none;
+    border: none;
+    color: #d9534f;
+    cursor: pointer;
+    padding: 0 5px;
+  }
+
+  .save-btn {
+    background-color: #4caf50;
+    color: white;
+  }
+
+  .cancel-btn {
+    background-color: #f0f0f0;
+    color: #333;
   }
   }
   </style>
