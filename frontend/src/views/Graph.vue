@@ -268,17 +268,20 @@
           this.loading = true;
           
           const response = await fetch('/api/v1/graph');
+          console.log('Response status:', response.status);
           
           if (!response.ok) {
-            throw new Error(`Failed to fetch graph data: ${response.status}`);
+            const errorText = await response.text();
+            console.error('Error response:', errorText);
+            throw new Error(`Failed to fetch graph data: ${response.status} - ${errorText}`);
           }
           
           const data = await response.json();
           console.log('Graph data received:', data);
           
           // Update the local data
-          this.nodes = data.nodes;
-          this.relationships = data.links;
+          this.nodes = data.nodes || [];
+          this.relationships = data.links || [];
           
           // Initialize visualization with the new data
           this.initVisualization();

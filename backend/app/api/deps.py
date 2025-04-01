@@ -4,7 +4,7 @@ from app.db.neo4j_db import Neo4jDatabase
 from app.core.config import settings
 
 
-async def get_db() -> Generator: 
+async def get_db() -> Generator:  # type: ignore
     """获取数据库连接"""
     db = Neo4jDatabase(
         uri=settings.NEO4J_URI,
