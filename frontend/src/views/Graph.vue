@@ -98,7 +98,7 @@
   
   <script>
   // import { KnowledgeGraphVisualizer } from '@/utils/graph-visualization';
-  
+  import * as d3 from 'd3';
   export default {
     name: 'Graph',
     data() {
@@ -109,6 +109,9 @@
         selectedEntity: null,
         entityRelationships: [],
         visualizer: null,
+        simulation: null,
+        svg: null,
+        zoom: null,
         // Mock nodes data for testing
         nodes: [
           { id: 'n1', name: '知识图谱', type: 'concept', description: '知识图谱是一种表示知识的图结构', properties: { domain: '人工智能', popularity: '高' } },
@@ -285,31 +288,192 @@
       },
 
       initVisualization() {
-        // Make sure the container is available
+        // Clear previous visualization
         const container = this.$refs.graphContainer;
         if (!container) {
           console.error('Graph container not found');
           return;
         }
+        container.innerHTML = '';
         
-        // Create visualization with D3
-        if (this.nodes.length === 0) {
+        // Check if we have nodes to display
+        if (!this.nodes || this.nodes.length === 0) {
           console.log('No nodes to display in graph');
-          return;
-        }
-        
-        // Display an indicator if graph is empty
-        if (this.nodes.length === 0) {
           const emptyMessage = document.createElement('div');
           emptyMessage.className = 'empty-graph-message';
           emptyMessage.innerHTML = '<i class="fas fa-info-circle"></i><p>知识图谱为空，请先通过文档提取知识</p>';
           container.appendChild(emptyMessage);
           return;
         }
+
+        console.log(`Initializing graph with ${this.nodes.length} nodes and ${this.relationships.length} links`);
         
-        // Update your visualization logic here
-        // This will depend on your specific D3 implementation
-        // ...
+        // Set up dimensions
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        
+        // Create SVG
+        const svg = d3.select(container)
+          .append('svg')
+          .attr('width', width)
+          .attr('height', height)
+          .attr('class', 'graph-svg');
+        
+        // Add zoom functionality
+        const zoom = d3.zoom()
+          .scaleExtent([0.1, 4])
+          .on('zoom', (event) => {
+            g.attr('transform', event.transform);
+          });
+        
+        svg.call(zoom);
+        
+        // Create container group for zoom
+        const g = svg.append('g');
+        
+        // Define arrow markers for links
+        svg.append('defs').selectAll('marker')
+          .data(this.relationships.map(r => r.type))
+          .enter().append('marker')
+          .attr('id', d => `arrow-${d}`)
+          .attr('viewBox', '0 -5 10 10')
+          .attr('refX', 20)
+          .attr('refY', 0)
+          .attr('markerWidth', 6)
+          .attr('markerHeight', 6)
+          .attr('orient', 'auto')
+          .append('path')
+          .attr('fill', '#999')
+          .attr('d', 'M0,-5L10,0L0,5');
+        
+        // Create links
+        const link = g.append('g')
+          .attr('class', 'links')
+          .selectAll('line')
+          .data(this.relationships)
+          .enter().append('line')
+          .attr('stroke', '#999')
+          .attr('stroke-width', 1.5)
+          .attr('marker-end', d => `url(#arrow-${d.type})`);
+        
+        // Create link labels
+        const linkLabel = g.append('g')
+          .attr('class', 'link-labels')
+          .selectAll('text')
+          .data(this.relationships)
+          .enter().append('text')
+          .attr('class', 'link-label')
+          .attr('font-size', '8px')
+          .attr('fill', '#666')
+          .text(d => d.type);
+        
+        // Create nodes
+        const node = g.append('g')
+          .attr('class', 'nodes')
+          .selectAll('g')
+          .data(this.nodes)
+          .enter().append('g')
+          .attr('class', 'node')
+          .call(d3.drag()
+            .on('start', this.dragStarted)
+            .on('drag', this.dragged)
+            .on('end', this.dragEnded))
+          .on('click', (event, d) => {
+            this.selectEntity(d);
+            event.stopPropagation();
+          });
+        
+        // Add circle to each node
+        node.append('circle')
+          .attr('r', 10)
+          .attr('fill', d => this.getNodeColor(d.type));
+        
+        // Add label to each node
+        node.append('text')
+          .attr('dy', -15)
+          .attr('text-anchor', 'middle')
+          .text(d => d.name)
+          .attr('font-size', '10px');
+        
+        // Set up force simulation
+        this.simulation = d3.forceSimulation(this.nodes)
+          .force('link', d3.forceLink(this.relationships)
+            .id(d => d.id)
+            .distance(150))
+          .force('charge', d3.forceManyBody().strength(-300))
+          .force('center', d3.forceCenter(width / 2, height / 2))
+          .force('collision', d3.forceCollide().radius(30))
+          .on('tick', () => {
+            // Update link positions
+            link
+              .attr('x1', d => d.source.x)
+              .attr('y1', d => d.source.y)
+              .attr('x2', d => d.target.x)
+              .attr('y2', d => d.target.y);
+            
+            // Update link label positions
+            linkLabel
+              .attr('x', d => (d.source.x + d.target.x) / 2)
+              .attr('y', d => (d.source.y + d.target.y) / 2);
+            
+            // Update node positions
+            node
+              .attr('transform', d => `translate(${d.x}, ${d.y})`);
+          });
+        
+        // Add reset view button
+        const resetButton = document.createElement('button');
+        resetButton.innerHTML = '<i class="fas fa-home"></i>';
+        resetButton.className = 'reset-button';
+        resetButton.addEventListener('click', this.resetView);
+        container.appendChild(resetButton);
+        
+        // Center the graph initially
+        this.resetView();
+      },
+
+      // Add these helper methods
+      dragStarted(event, d) {
+        if (!event.active) this.simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+      },
+
+      dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+      },
+
+      dragEnded(event, d) {
+        if (!event.active) this.simulation.alphaTarget(0);
+        // Keep nodes fixed where they're dragged
+        // d.fx = null;
+        // d.fy = null;
+      },
+
+      resetView() {
+        if (!this.svg) return;
+        
+        const container = this.$refs.graphContainer;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        
+        this.svg.transition().duration(750).call(
+          this.zoom.transform,
+          d3.zoomIdentity.translate(width/2, height/2).scale(0.8)
+        );
+      },
+
+      getNodeColor(type) {
+        const colorMap = {
+          'person': '#ff7f0e',
+          'organization': '#1f77b4',
+          'location': '#2ca02c',
+          'concept': '#d62728',
+          'time': '#9467bd',
+          'event': '#8c564b'
+        };
+        return colorMap[type] || '#aaa';
       }
     },
     mounted() {
@@ -674,5 +838,44 @@
     font-size: 3rem;
     margin-bottom: 1rem;
     }
+
+  .graph-svg {
+    width: 100%;
+    height: 100%;
+    background-color: #f9f9f9;
+  }
+
+  .reset-button {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: white;
+    border: 1px solid #ddd;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .nodes circle {
+    stroke: white;
+    stroke-width: 1.5px;
+  }
+
+  .nodes text {
+    pointer-events: none;
+  }
+
+  .links line {
+    stroke-opacity: 0.6;
+  }
+
+  .link-label {
+    pointer-events: none;
+  }
   }
   </style>
