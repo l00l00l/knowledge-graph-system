@@ -30,19 +30,6 @@
       
       <div class="graph-area">
         <div class="graph-container" ref="graphContainer"></div>
-        
-        <!-- Make sure this div is present and correctly positioned -->
-        <div class="graph-controls">
-          <button @click="zoomIn" title="放大">
-            <i class="fas fa-search-plus"></i>
-          </button>
-          <button @click="zoomOut" title="缩小">
-            <i class="fas fa-search-minus"></i>
-          </button>
-          <button @click="resetView" title="重置视图">
-            <i class="fas fa-home"></i>
-          </button>
-        </div>
       </div>
             
       <div class="detail-panel" v-if="selectedEntity">
@@ -477,50 +464,8 @@
               .attr('transform', d => `translate(${d.x}, ${d.y})`);
           });
         
-        // Center the graph initially
-        this.resetView();
       },
 
-      addGraphControls() {
-        const graphArea = this.$el.querySelector('.graph-area');
-        if (!graphArea) return;
-        
-        // Check if controls already exist
-        let controls = graphArea.querySelector('.graph-controls');
-        if (controls) return;
-        
-        // Create controls container
-        controls = document.createElement('div');
-        controls.className = 'graph-controls';
-        
-        // Create zoom in button
-        const zoomInBtn = document.createElement('button');
-        zoomInBtn.innerHTML = '<i class="fas fa-search-plus"></i>';
-        zoomInBtn.title = '放大';
-        zoomInBtn.addEventListener('click', this.zoomIn);
-        
-        // Create zoom out button
-        const zoomOutBtn = document.createElement('button');
-        zoomOutBtn.innerHTML = '<i class="fas fa-search-minus"></i>';
-        zoomOutBtn.title = '缩小';
-        zoomOutBtn.addEventListener('click', this.zoomOut);
-        
-        // Create reset button
-        const resetBtn = document.createElement('button');
-        resetBtn.innerHTML = '<i class="fas fa-home"></i>';
-        resetBtn.title = '重置视图';
-        resetBtn.addEventListener('click', this.resetView);
-        
-        // Add buttons to controls
-        controls.appendChild(zoomInBtn);
-        controls.appendChild(zoomOutBtn);
-        controls.appendChild(resetBtn);
-        
-        // Add controls to graph area
-        graphArea.appendChild(controls);
-        
-        console.log('Graph controls added programmatically');
-      },
       // Add these helper methods
       dragStarted(event, d) {
         if (!event.active) this.simulation.alphaTarget(0.3).restart();
@@ -538,34 +483,6 @@
         // Keep nodes fixed where they're dragged
          d.fx = null;
          d.fy = null;
-      },
-
-      // Make sure these methods are included in your methods section
-      zoomIn() {
-        if (!this.svg || !this.zoom) return;
-        this.svg.transition().duration(300).call(
-          this.zoom.scaleBy, 1.3
-        );
-      },
-
-      zoomOut() {
-        if (!this.svg || !this.zoom) return;
-        this.svg.transition().duration(300).call(
-          this.zoom.scaleBy, 0.7
-        );
-      },
-
-      resetView() {
-        if (!this.svg || !this.zoom) return;
-        
-        const container = this.$refs.graphContainer;
-        const width = container.clientWidth;
-        const height = container.clientHeight;
-        
-        this.svg.transition().duration(750).call(
-          this.zoom.transform,
-          d3.zoomIdentity.translate(width/2, height/2).scale(0.8)
-        );
       },
 
       getNodeColor(type) {
@@ -984,42 +901,6 @@
 
   .link-label {
     pointer-events: none;
-  }
-
-  .graph-controls {
-    position: absolute;
-    bottom: 20px;
-    right: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    z-index: 1000;  /* Significantly higher z-index */
-    background-color: rgba(255, 255, 255, 0.8);
-    padding: 8px;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);  /* More visible shadow */
-    pointer-events: auto;  /* Ensure clicks are detected */
-  }
-
-  .graph-controls button {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background-color: white;
-    border: 1px solid #ddd;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-size: 16px;  /* Larger icon size */
-    color: #333;
-  }
-
-  .graph-controls button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-    background-color: #f0f0f0;
   }
 
   .control-panel.collapsed .panel-content {
