@@ -12,9 +12,23 @@ class EntityType(Base):
     id = Column(Integer, primary_key=True)
     type_code = Column(String, unique=True, index=True)  # 类型编码，如 'person'
     type_name = Column(String)  # 类型中文名称，如 '人物'
+    category = Column(String, index=True)  # 类别：基础类型、领域类型、个人类型
     icon = Column(String, nullable=True)  # 图标类，如 'fa-user'
     color = Column(String, nullable=True)  # 颜色代码，如 '#ff7f0e'
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class RelationshipType(Base):
+    """关系类型定义"""
+    __tablename__ = "relationship_types"
+    
+    id = Column(Integer, primary_key=True)
+    type_code = Column(String, unique=True, index=True)  # 类型编码，如 'is_a'
+    type_name = Column(String)  # 类型中文名称，如 '是一种'
+    category = Column(String, index=True)  # 类别：基础类型、领域类型、个人类型
+    icon = Column(String, nullable=True)  # 图标类，如 'fa-sitemap'
+    color = Column(String, nullable=True)  # 颜色代码，如 '#999999'
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
 class Document(Base):
     """文档模型"""
     __tablename__ = "documents"

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.sqlite_db import get_sqlite_db
@@ -8,19 +8,32 @@ from pydantic import BaseModel
 router = APIRouter()
 
 class EntityTypeSchema(BaseModel):
-    id: int = None
+    id: Optional[int] = None
     type_code: str
     type_name: str
-    icon: str = None
-    color: str = None
+    category: str
+    icon: Optional[str] = None
+    color: Optional[str] = None
     
     class Config:
         orm_mode = True
 
 @router.get("/", response_model=List[EntityTypeSchema])
-def read_entity_types(db: Session = Depends(get_sqlite_db)):
-    """获取所有实体类型"""
-    return db.query(EntityType).all()
+def read_entity_types(
+    db: Session = Depends(get_sqlite_db),
+    category: Optional[str] = None
+):
+    """获取实体类型"""
+    query = db.query(EntityType)
+    if category:
+        query = query.filter(EntityType.category == category)
+    return query.all()
+
+@router.get("/categories", response_model=List[str])
+def read_entity_type_categories(db: Session = Depends(get_sqlite_db)):
+    """获取实体类型分类"""
+    categories = db.query(EntityType.category).distinct().all()
+    return [c[0] for c in categories]
 
 @router.post("/", response_model=EntityTypeSchema)
 def create_entity_type(entity_type: EntityTypeSchema, db: Session = Depends(get_sqlite_db)):

@@ -104,11 +104,21 @@
                 
                 <div class="form-group">
                   <label>类型</label>
-                  <select v-model="editFormData.type" class="form-input">
-                    <option v-for="type in availableEntityTypes" :key="type.type_code" :value="type.type_code">
-                      {{ type.type_name }}
-                    </option>
-                  </select>
+                  <div class="type-selector">
+                    <select v-model="selectedEntityTypeCategory" class="form-input category-select">
+                      <option value="">-- 选择类型分类 --</option>
+                      <option v-for="category in entityTypeCategories" :key="category">
+                        {{ category }}
+                      </option>
+                    </select>
+                    
+                    <select v-model="editFormData.type" class="form-input type-select">
+                      <option value="">-- 选择类型 --</option>
+                      <option v-for="type in filteredEntityTypes" :key="type.type_code" :value="type.type_code">
+                        {{ type.type_name }}
+                      </option>
+                    </select>
+                  </div>
                 </div>
                 
                 <div class="form-group">
@@ -130,7 +140,116 @@
                     </button>
                   </div>
                 </div>
-              </div>
+                
+                <!-- 添加关系管理区域 -->
+                <div class="form-group relationships-section">
+                  <label>关系</label>
+                  <button @click="showAddRelationship = true" class="add-relationship-btn">
+                    <i class="fas fa-plus"></i> 添加关系
+                  </button>
+                  
+                  <div v-if="entityRelationships.length === 0" class="no-relationships">
+                    暂无关系数据
+                  </div>
+                  
+                  <div v-else class="entity-relationships-list">
+                    <div v-for="(rel, index) in entityRelationships" :key="index" class="relationship-edit-row">
+                      <div class="relationship-direction">
+                        <i :class="rel.direction === 'outgoing' ? 'fas fa-arrow-right' : 'fas fa-arrow-left'"></i>
+                      </div>
+                      <div class="relationship-type">{{ getRelationshipTypeName(rel.type) }}</div>
+                      <div class="related-entity">{{ rel.target.name }}</div>
+                      <button @click="removeRelationship(index)" class="remove-relationship-btn">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <!-- 添加关系对话框 -->
+                <div v-if="showAddRelationship" class="add-relationship-modal">
+                  <div class="add-relationship-content">
+                    <div class="modal-header">
+                      <h3>添加关系</h3>
+                      <button @click="showAddRelationship = false" class="close-btn">
+                        <i class="fas fa-times"></i>
+                      </button>
+                    </div>
+                    
+                    <div class="modal-body">
+                      <div class="form-group">
+                        <label>关系方向</label>
+                        <div class="direction-selector">
+                          <label>
+                            <input type="radio" v-model="newRelationship.direction" value="outgoing">
+                            <span>出发 ({{ editFormData.name }} → 目标)</span>
+                          </label>
+                          <label>
+                            <input type="radio" v-model="newRelationship.direction" value="incoming">
+                            <span>接收 (目标 → {{ editFormData.name }})</span>
+                          </label>
+                        </div>
+                      </div>
+                      
+                      <div class="form-group">
+                        <label>关系类型</label>
+                        <div class="type-selector">
+                          <select v-model="selectedRelationshipTypeCategory" class="form-input category-select">
+                            <option value="">-- 选择关系类型分类 --</option>
+                            <option v-for="category in relationshipTypeCategories" :key="category">
+                              {{ category }}
+                            </option>
+                          </select>
+                          
+                          <select v-model="newRelationship.type" class="form-input type-select">
+                            <option value="">-- 选择关系类型 --</option>
+                            <option v-for="type in filteredRelationshipTypes" :key="type.type_code" :value="type.type_code">
+                              {{ type.type_name }}
+                            </option>
+                          </select>
+                        </div>
+                      </div>
+                      
+                      <div class="form-group">
+                        <label>目标实体</label>
+                        <div class="entity-search">
+                          <input 
+                            type="text" 
+                            v-model="targetEntitySearch" 
+                            @input="searchTargetEntities"
+                            placeholder="搜索实体..." 
+                            class="form-input"
+                          >
+                          
+                          <div v-if="searchResults.length > 0" class="search-results">
+                            <div 
+                              v-for="entity in searchResults" 
+                              :key="entity.id" 
+                              class="search-result-item"
+                              @click="selectTargetEntity(entity)"
+                            >
+                              {{ entity.name }} ({{ getEntityTypeName(entity.type) }})
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div v-if="newRelationship.targetEntity" class="selected-target-entity">
+                          已选择: {{ newRelationship.targetEntity.name }}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                      <button @click="showAddRelationship = false" class="btn cancel-btn">取消</button>
+                      <button 
+                        @click="addRelationship" 
+                        class="btn save-btn" 
+                        :disabled="!isNewRelationshipValid"
+                      >
+                        添加
+                      </button>
+                    </div>
+                  </div>
+                </div>
               
               <div class="edit-modal-footer">
                 <button @click="cancelEdit" class="btn cancel-btn">取消</button>
@@ -146,7 +265,8 @@
         </button>
       </div>
     </div>
-  </template>
+    </div>
+</template>
   
   <script>
   // import { KnowledgeGraphVisualizer } from '@/utils/graph-visualization';
@@ -168,6 +288,20 @@
         editingEntity: null,
         editFormData: {},
         availableEntityTypes: [],
+        entityTypes: [],
+        relationshipTypes: [],
+        entityTypeCategories: [],
+        relationshipTypeCategories: [],
+        selectedEntityTypeCategory: '',
+        selectedRelationshipTypeCategory: '',
+        showAddRelationship: false,
+        newRelationship: {
+          direction: 'outgoing',
+          type: '',
+          targetEntity: null
+        },
+        targetEntitySearch: '',
+        searchResults: [],
         // Mock nodes data for testing
         nodes: [
           { id: 'n1', name: '知识图谱', type: 'concept', description: '知识图谱是一种表示知识的图结构', properties: { domain: '人工智能', popularity: '高' } },
@@ -190,6 +324,20 @@
         return [...new Set(this.nodes.map(node => node.type))];
       },
       
+
+      filteredEntityTypes() {
+        if (!this.selectedEntityTypeCategory) return this.entityTypes;
+        return this.entityTypes.filter(type => type.category === this.selectedEntityTypeCategory);
+      },
+      
+      filteredRelationshipTypes() {
+        if (!this.selectedRelationshipTypeCategory) return this.relationshipTypes;
+        return this.relationshipTypes.filter(type => type.category === this.selectedRelationshipTypeCategory);
+      },
+      
+      isNewRelationshipValid() {
+        return this.newRelationship.type && this.newRelationship.targetEntity;
+      },
       filteredNodes() {
         let result = this.nodes;
         
@@ -395,14 +543,35 @@
         try {
           const response = await fetch('/api/v1/entity-types');
           if (response.ok) {
-            const types = await response.json();
-            this.availableEntityTypes = types;
-            console.log('Loaded entity types:', types);
+            const data = await response.json();
+            this.entityTypes = data;
+            
+            // Extract unique categories
+            this.entityTypeCategories = [...new Set(data.map(type => type.category))];
+            console.log('Loaded entity types:', data);
           } else {
             console.error('Failed to load entity types:', response.statusText);
           }
         } catch (error) {
           console.error('Error fetching entity types:', error);
+        }
+      },
+
+      async fetchRelationshipTypes() {
+        try {
+          const response = await fetch('/api/v1/relationship-types');
+          if (response.ok) {
+            const data = await response.json();
+            this.relationshipTypes = data;
+            
+            // Extract unique categories
+            this.relationshipTypeCategories = [...new Set(data.map(type => type.category))];
+            console.log('Loaded relationship types:', data);
+          } else {
+            console.error('Failed to load relationship types:', response.statusText);
+          }
+        } catch (error) {
+          console.error('Error fetching relationship types:', error);
         }
       },
       initVisualization() {
@@ -542,6 +711,65 @@
           });
         
       },
+
+      getEntityTypeName(typeCode) {
+        const type = this.entityTypes.find(t => t.type_code === typeCode);
+        return type ? type.type_name : typeCode;
+      },
+      
+      getRelationshipTypeName(typeCode) {
+        const type = this.relationshipTypes.find(t => t.type_code === typeCode);
+        return type ? type.type_name : typeCode;
+      },
+      
+      searchTargetEntities() {
+        if (!this.targetEntitySearch) {
+          this.searchResults = [];
+          return;
+        }
+        
+        const query = this.targetEntitySearch.toLowerCase();
+        this.searchResults = this.nodes
+          .filter(node => 
+            node.id !== this.editingEntity.id && 
+            node.name.toLowerCase().includes(query)
+          )
+          .slice(0, 5); // Limit to 5 results
+      },
+      
+      selectTargetEntity(entity) {
+        this.newRelationship.targetEntity = entity;
+        this.targetEntitySearch = '';
+        this.searchResults = [];
+      },
+      
+      addRelationship() {
+        if (!this.isNewRelationshipValid) return;
+        
+        const relationship = {
+          id: 'temp-' + Date.now(),
+          type: this.newRelationship.type,
+          direction: this.newRelationship.direction,
+          target: this.newRelationship.targetEntity
+        };
+        
+        this.entityRelationships.push(relationship);
+        
+        // Reset the form
+        this.newRelationship = {
+          direction: 'outgoing',
+          type: '',
+          targetEntity: null
+        };
+        
+        this.showAddRelationship = false;
+      },
+      
+      removeRelationship(index) {
+        if (confirm('确定要删除这个关系吗？')) {
+          this.entityRelationships.splice(index, 1);
+        }
+      },
       saveEntityChanges() {
         console.log('Saving entity changes');
         
@@ -661,6 +889,7 @@
       console.log('Graph component mounted, fetching graph data...');
       this.fetchEntityTypes();
       this.fetchGraphData();
+      this.fetchRelationshipTypes();
       window.addEventListener('resize', this.handleResize);
     },
     beforeUnmount() {
@@ -1208,6 +1437,155 @@
   .cancel-btn {
     background-color: #f0f0f0;
     color: #333;
+  }
+
+  /* Type selector styles */
+  .type-selector {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .category-select {
+    width: 40%;
+  }
+
+  .type-select {
+    width: 60%;
+  }
+
+  /* Relationship section styles */
+  .relationships-section {
+    margin-top: 20px;
+    border-top: 1px solid #eee;
+    padding-top: 20px;
+  }
+
+  .add-relationship-btn {
+    background-color: #e1f5fe;
+    color: #0277bd;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    margin-bottom: 10px;
+  }
+
+  .no-relationships {
+    color: #999;
+    font-style: italic;
+    padding: 10px 0;
+  }
+
+  .entity-relationships-list {
+    margin-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .relationship-edit-row {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    margin-bottom: 5px;
+  }
+
+  .relationship-direction {
+    width: 30px;
+    text-align: center;
+  }
+
+  .relationship-type {
+    width: 100px;
+    font-weight: 500;
+  }
+
+  .related-entity {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .remove-relationship-btn {
+    background: none;
+    border: none;
+    color: #d9534f;
+    cursor: pointer;
+    padding: 0 5px;
+  }
+
+  /* Add relationship modal styles */
+  .add-relationship-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1100;
+  }
+
+  .add-relationship-content {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    width: 500px;
+    max-width: 90%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .direction-selector {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 10px;
+  }
+
+  .entity-search {
+    position: relative;
+  }
+
+  .search-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 0 0 4px 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 10;
+  }
+
+  .search-result-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+  }
+
+  .search-result-item:last-child {
+    border-bottom: none;
+  }
+
+  .search-result-item:hover {
+    background-color: #f5f5f5;
+  }
+
+  .selected-target-entity {
+    margin-top: 10px;
+    padding: 8px;
+    background-color: #e3f2fd;
+    border-radius: 4px;
+    color: #0277bd;
   }
   }
   </style>
