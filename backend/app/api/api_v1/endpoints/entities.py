@@ -58,9 +58,18 @@ async def update_entity(
     db: Neo4jDatabase = Depends(get_db)
 ):
     """更新实体"""
+    print(f"Updating entity {entity_id}...")
+    
+    # Make sure the entity ID in path matches the entity object
+    if entity.id != entity_id:
+        entity.id = entity_id
+    
+    # Call the database update method
     updated_entity = await db.update(entity_id, entity)
+    
     if updated_entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
+    
     return updated_entity
 
 

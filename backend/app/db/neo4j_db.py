@@ -119,8 +119,12 @@ class Neo4jDatabase(DatabaseInterface[T]):
     
     async def update(self, id: UUID, obj: T) -> Optional[T]:
         """更新实体或关系"""
-        # 这里需要实现具体的更新逻辑
-        pass
+        if isinstance(obj, Entity):
+            return await self._update_entity(obj)
+        elif isinstance(obj, Relationship):
+            return await self._update_relationship(obj)
+        else:
+            raise TypeError(f"不支持的类型: {type(obj)}")
     
     async def delete(self, id: UUID) -> bool:
         """删除实体或关系"""
@@ -148,4 +152,44 @@ class Neo4jDatabase(DatabaseInterface[T]):
             print(f"Neo4j connection test failed: {e}")
             return False
         
-    
+    async def _update_entity(self, entity: Entity) -> Entity:
+        """更新实体节点"""
+        # 将Pydantic模型转为字典
+        entity_dict = entity.dict()
+        entity_id = str(entity.id)
+        props = {k: v for k, v in entity_dict.items() if v is not None and k not in ['id', 'type']}
+        
+        # 将复杂类型转换为JSON字符串
+        for k, v in props.items():
+            if isinstance(v, (dict, list)):
+                props[k] = json.dumps(v)
+            # 添加UUID转换
+            elif isinstance(v, UUID):
+                props[k] = str(v)
+        
+        # 构建Cypher查询
+        query = """
+        MATCH (e:Entity {id: $id})
+        SET e = $props
+        SET e:%s
+        RETURN e
+        """ % entity.type
+        
+        params = {
+            "id": entity_id,
+            "props": props
+        }
+        
+        try:
+            async with self.driver.session(database=self.database) as session:
+                result = await session.run(query, **params)
+                record = await result.single()
+                if record:
+                    print(f"Successfully updated entity: {entity.name}")
+                    return entity
+                else:
+                    print(f"Entity not found: {entity_id}")
+                    return None
+        except Exception as e:
+            print(f"Error in _update_entity: {e}")
+            raise e

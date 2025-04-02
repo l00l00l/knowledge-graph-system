@@ -533,6 +533,12 @@
       saveEntityChanges() {
         console.log('Saving entity changes');
         
+        // Check if we have an entity ID
+        if (!this.editingEntity || !this.editingEntity.id) {
+          alert('缺少实体ID，无法更新');
+          return;
+        }
+        
         // Prepare the updated entity data
         const updatedEntity = {
           ...this.editingEntity,
@@ -541,6 +547,8 @@
           description: this.editFormData.description,
           properties: this.editFormData.properties
         };
+        
+        console.log('Sending update request for entity:', updatedEntity);
         
         // Call API to update entity
         fetch(`/api/v1/entities/${this.editingEntity.id}`, {
@@ -551,13 +559,18 @@
           body: JSON.stringify(updatedEntity)
         })
         .then(response => {
+          console.log('Update response status:', response.status);
           if (!response.ok) {
-            throw new Error('Failed to update entity');
+            return response.text().then(text => {
+              throw new Error(`Failed to update entity: ${response.status} - ${text || response.statusText}`);
+            });
           }
           return response.json();
         })
         .then(data => {
-          // Update the entity in the graph
+          console.log('Update successful, received data:', data);
+          
+          // Update the entity in the nodes array
           const index = this.nodes.findIndex(node => node.id === data.id);
           if (index !== -1) {
             this.nodes[index] = data;
