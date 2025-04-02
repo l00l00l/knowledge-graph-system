@@ -1,5 +1,5 @@
 # 文件: app/api/api_v1/endpoints/entities.py
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from app.models.entities.entity import Entity
@@ -8,6 +8,32 @@ from app.api.deps import get_db
 
 router = APIRouter()
 
+
+# Add to app/api/api_v1/endpoints/entities.py
+
+@router.get("/search", response_model=List[Dict[str, Any]])
+async def search_entities(
+    query: str = Query(..., min_length=2),
+    limit: int = Query(10, ge=1, le=50),
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """根据名称搜索实体"""
+    cypher_query = """
+    MATCH (n:Entity)
+    WHERE n.name CONTAINS $query
+    RETURN n.id as id, n.name as name, n.type as type
+    LIMIT $limit
+    """
+    
+    try:
+        # Execute the query
+        async with db.driver.session(database=db.database) as session:
+            result = await session.run(cypher_query, query=query, limit=limit)
+            data = await result.data()
+            
+            return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error searching entities: {str(e)}")
 
 @router.get("/", response_model=List[Entity])
 async def read_entities(

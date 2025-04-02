@@ -1,102 +1,105 @@
 <!-- Graph.vue -->
 <template>
-    <div class="graph-view">
-      <div class="control-panel" :class="{ 'collapsed': isPanelCollapsed }">
-        <div class="panel-header">
-          <h2>控制面板</h2>
-          <button class="toggle-button" @click="togglePanel">
-            <i :class="isPanelCollapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left'"></i>
-          </button>
-        </div>
-        
-        <div v-show="!isPanelCollapsed" class="panel-content">
-          <div class="search-box">
-            <input type="text" placeholder="搜索实体..." v-model="searchQuery" @input="filterNodes">
-            <i class="fas fa-search"></i>
-          </div>
-          
-          <div class="filter-section">
-            <h3>实体类型过滤</h3>
-            <div class="type-filters">
-              <label v-for="type in entityTypes" :key="type" class="filter-checkbox">
-                <input type="checkbox" :value="type" v-model="activeFilters">
-                <span :class="['node-badge', type]"></span>
-                <span>{{ type }}</span>
-              </label>
-            </div>
-          </div>
-        </div>
+  <div class="graph-view">
+    <div class="control-panel" :class="{ 'collapsed': isPanelCollapsed }">
+      <div class="panel-header">
+        <h2>控制面板</h2>
+        <button class="toggle-button" @click="togglePanel">
+          <i :class="isPanelCollapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left'"></i>
+        </button>
       </div>
       
-      <div class="graph-area">
-        <div class="graph-container" ref="graphContainer"></div>
+      <div v-show="!isPanelCollapsed" class="panel-content">
+        <div class="search-box">
+          <input type="text" placeholder="搜索实体..." v-model="searchQuery" @input="filterNodes">
+          <i class="fas fa-search"></i>
+        </div>
+        
+        <div class="filter-section">
+          <h3>实体类型过滤</h3>
+          <div class="type-filters">
+            <label v-for="type in entityTypes" :key="type" class="filter-checkbox">
+              <input type="checkbox" :value="type" v-model="activeFilters">
+              <span :class="['node-badge', type]"></span>
+              <span>{{ type }}</span>
+            </label>
+          </div>
+        </div>
       </div>
-            
-      <div class="detail-panel" v-if="selectedEntity">
-        <div class="entity-detail-container">
-          <div v-if="selectedEntity" class="entity-card">
-            <div class="entity-header" :class="selectedEntity.type">
-              <h2>{{ selectedEntity.name }}</h2>
-              <span class="entity-type-badge">{{ selectedEntity.type }}</span>
+    </div>
+    
+    <div class="graph-area">
+      <div class="graph-container" ref="graphContainer"></div>
+    </div>
+          
+    <div class="detail-panel" v-if="selectedEntity">
+      <div class="entity-detail-container">
+        <div v-if="selectedEntity" class="entity-card">
+          <div class="entity-header" :class="selectedEntity.type">
+            <h2>{{ selectedEntity.name }}</h2>
+            <span class="entity-type-badge">{{ selectedEntity.type }}</span>
+          </div>
+          
+          <div class="entity-body">
+            <div v-if="selectedEntity.description" class="entity-description">
+              {{ selectedEntity.description }}
             </div>
             
-            <div class="entity-body">
-              <div v-if="selectedEntity.description" class="entity-description">
-                {{ selectedEntity.description }}
+            <div class="entity-properties">
+              <h3>属性</h3>
+              <div v-for="(value, key) in selectedEntity.properties" :key="key" class="property-item">
+                <span class="property-key">{{ key }}:</span>
+                <span class="property-value">{{ formatPropertyValue(value) }}</span>
               </div>
-              
-              <div class="entity-properties">
-                <h3>属性</h3>
-                <div v-for="(value, key) in selectedEntity.properties" :key="key" class="property-item">
-                  <span class="property-key">{{ key }}:</span>
-                  <span class="property-value">{{ formatPropertyValue(value) }}</span>
-                </div>
+            </div>
+            
+            <div class="entity-relationships">
+              <h3>关系 ({{ entityRelationships.length }})</h3>
+              <div v-if="entityRelationships.length === 0" class="no-data">
+                无相关关系
               </div>
-              
-              <div class="entity-relationships">
-                <h3>关系 ({{ entityRelationships.length }})</h3>
-                <div v-if="entityRelationships.length === 0" class="no-data">
-                  无相关关系
-                </div>
-                <div v-else class="relationship-list">
-                  <div v-for="rel in entityRelationships" :key="rel.id" class="relationship-item" 
-                      @click="selectEntity(rel.target)">
-                    <div class="relationship-direction">
-                      <i v-if="rel.direction === 'outgoing'" class="fas fa-arrow-right"></i>
-                      <i v-else-if="rel.direction === 'incoming'" class="fas fa-arrow-left"></i>
-                      <i v-else class="fas fa-arrows-alt-h"></i>
-                    </div>
-                    <div class="relationship-type">{{ rel.type }}</div>
-                    <div class="related-entity" :class="rel.target.type">
-                      {{ rel.target.name }}
-                    </div>
+              <div v-else class="relationship-list">
+                <div v-for="rel in entityRelationships" :key="rel.id" class="relationship-item" 
+                    @click="selectEntity(rel.target)">
+                  <div class="relationship-direction">
+                    <i v-if="rel.direction === 'outgoing'" class="fas fa-arrow-right"></i>
+                    <i v-else-if="rel.direction === 'incoming'" class="fas fa-arrow-left"></i>
+                    <i v-else class="fas fa-arrows-alt-h"></i>
+                  </div>
+                  <div class="relationship-type">{{ rel.type }}</div>
+                  <div class="related-entity" :class="rel.target.type">
+                    {{ rel.target.name }}
                   </div>
                 </div>
               </div>
             </div>
-            
-            <div class="entity-actions">
-              <button @click="editEntity" class="btn edit-btn">
-                <i class="fas fa-edit"></i> 编辑
-              </button>
-              <button @click="traceKnowledge" class="btn trace-btn">
-                <i class="fas fa-history"></i> 溯源
-              </button>
-              <button @click="exploreContext" class="btn explore-btn">
-                <i class="fas fa-project-diagram"></i> 探索上下文
+          </div>
+          
+          <div class="entity-actions">
+            <button @click="editEntity" class="btn edit-btn">
+              <i class="fas fa-edit"></i> 编辑
+            </button>
+            <button @click="traceKnowledge" class="btn trace-btn">
+              <i class="fas fa-history"></i> 溯源
+            </button>
+            <button @click="exploreContext" class="btn explore-btn">
+              <i class="fas fa-project-diagram"></i> 探索上下文
+            </button>
+          </div>
+        </div>
+        <!-- Replace the current edit-modal with this improved version -->
+        <div v-if="isEditing" class="edit-modal">
+          <div class="edit-modal-content">
+            <div class="edit-modal-header">
+              <h3>编辑实体</h3>
+              <button @click="cancelEdit" class="close-btn">
+                <i class="fas fa-times"></i>
               </button>
             </div>
-          </div>
-          <div v-if="isEditing" class="edit-modal">
-            <div class="edit-modal-content">
-              <div class="edit-modal-header">
-                <h3>编辑实体</h3>
-                <button @click="cancelEdit" class="close-btn">
-                  <i class="fas fa-times"></i>
-                </button>
-              </div>
-              
-              <div class="edit-modal-body">
+            
+            <div class="edit-modal-body">
+              <div class="form-section">
+                <h4 class="section-title">基本信息</h4>
                 <div class="form-group">
                   <label>名称</label>
                   <input type="text" v-model="editFormData.name" class="form-input">
@@ -106,14 +109,14 @@
                   <label>类型</label>
                   <div class="type-selector">
                     <select v-model="selectedEntityTypeCategory" class="form-input category-select">
-                      <option value="">-- 选择类型分类 --</option>
+                      <option value="">所有分类</option>
                       <option v-for="category in entityTypeCategories" :key="category">
                         {{ category }}
                       </option>
                     </select>
                     
                     <select v-model="editFormData.type" class="form-input type-select">
-                      <option value="">-- 选择类型 --</option>
+                      <option value="">请选择类型</option>
                       <option v-for="type in filteredEntityTypes" :key="type.type_code" :value="type.type_code">
                         {{ type.type_name }}
                       </option>
@@ -125,13 +128,19 @@
                   <label>描述</label>
                   <textarea v-model="editFormData.description" class="form-input" rows="3"></textarea>
                 </div>
+              </div>
+              
+              <div class="form-section">
+                <h4 class="section-title">属性</h4>
+                <button @click="addEntityProperty" class="add-property-btn">
+                  <i class="fas fa-plus"></i> 添加属性
+                </button>
                 
-                <div class="form-group">
-                  <label>属性</label>
-                  <button @click="addEntityProperty" class="add-property-btn">
-                    <i class="fas fa-plus"></i> 添加属性
-                  </button>
-                  
+                <div v-if="Object.keys(editFormData.properties).length === 0" class="no-data-message">
+                  暂无属性数据
+                </div>
+                
+                <div v-else class="properties-list">
                   <div v-for="(value, key) in editFormData.properties" :key="key" class="property-edit-row">
                     <div class="property-key">{{ key }}:</div>
                     <input type="text" v-model="editFormData.properties[key]" class="property-value-input">
@@ -140,132 +149,136 @@
                     </button>
                   </div>
                 </div>
-                
-                <!-- 添加关系管理区域 -->
-                <div class="form-group relationships-section">
-                  <label>关系</label>
-                  <button @click="showAddRelationship = true" class="add-relationship-btn">
-                    <i class="fas fa-plus"></i> 添加关系
-                  </button>
-                  
-                  <div v-if="entityRelationships.length === 0" class="no-relationships">
-                    暂无关系数据
-                  </div>
-                  
-                  <div v-else class="entity-relationships-list">
-                    <div v-for="(rel, index) in entityRelationships" :key="index" class="relationship-edit-row">
-                      <div class="relationship-direction">
-                        <i :class="rel.direction === 'outgoing' ? 'fas fa-arrow-right' : 'fas fa-arrow-left'"></i>
-                      </div>
-                      <div class="relationship-type">{{ getRelationshipTypeName(rel.type) }}</div>
-                      <div class="related-entity">{{ rel.target.name }}</div>
-                      <button @click="removeRelationship(index)" class="remove-relationship-btn">
-                        <i class="fas fa-trash"></i>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <!-- 添加关系对话框 -->
-                <div v-if="showAddRelationship" class="add-relationship-modal">
-                  <div class="add-relationship-content">
-                    <div class="modal-header">
-                      <h3>添加关系</h3>
-                      <button @click="showAddRelationship = false" class="close-btn">
-                        <i class="fas fa-times"></i>
-                      </button>
-                    </div>
-                    
-                    <div class="modal-body">
-                      <div class="form-group">
-                        <label>关系方向</label>
-                        <div class="direction-selector">
-                          <label>
-                            <input type="radio" v-model="newRelationship.direction" value="outgoing">
-                            <span>出发 ({{ editFormData.name }} → 目标)</span>
-                          </label>
-                          <label>
-                            <input type="radio" v-model="newRelationship.direction" value="incoming">
-                            <span>接收 (目标 → {{ editFormData.name }})</span>
-                          </label>
-                        </div>
-                      </div>
-                      
-                      <div class="form-group">
-                        <label>关系类型</label>
-                        <div class="type-selector">
-                          <select v-model="selectedRelationshipTypeCategory" class="form-input category-select">
-                            <option value="">-- 选择关系类型分类 --</option>
-                            <option v-for="category in relationshipTypeCategories" :key="category">
-                              {{ category }}
-                            </option>
-                          </select>
-                          
-                          <select v-model="newRelationship.type" class="form-input type-select">
-                            <option value="">-- 选择关系类型 --</option>
-                            <option v-for="type in filteredRelationshipTypes" :key="type.type_code" :value="type.type_code">
-                              {{ type.type_name }}
-                            </option>
-                          </select>
-                        </div>
-                      </div>
-                      
-                      <div class="form-group">
-                        <label>目标实体</label>
-                        <div class="entity-search">
-                          <input 
-                            type="text" 
-                            v-model="targetEntitySearch" 
-                            @input="searchTargetEntities"
-                            placeholder="搜索实体..." 
-                            class="form-input"
-                          >
-                          
-                          <div v-if="searchResults.length > 0" class="search-results">
-                            <div 
-                              v-for="entity in searchResults" 
-                              :key="entity.id" 
-                              class="search-result-item"
-                              @click="selectTargetEntity(entity)"
-                            >
-                              {{ entity.name }} ({{ getEntityTypeName(entity.type) }})
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div v-if="newRelationship.targetEntity" class="selected-target-entity">
-                          已选择: {{ newRelationship.targetEntity.name }}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div class="modal-footer">
-                      <button @click="showAddRelationship = false" class="btn cancel-btn">取消</button>
-                      <button 
-                        @click="addRelationship" 
-                        class="btn save-btn" 
-                        :disabled="!isNewRelationshipValid"
-                      >
-                        添加
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              
-              <div class="edit-modal-footer">
-                <button @click="cancelEdit" class="btn cancel-btn">取消</button>
-                <button @click="saveEntityChanges" class="btn save-btn">保存</button>
               </div>
+              
+              <div class="form-section">
+                <h4 class="section-title">关系</h4>
+                <button @click="showAddRelationship = true" class="add-relationship-btn">
+                  <i class="fas fa-plus"></i> 添加关系
+                </button>
+                
+                <div v-if="entityRelationships.length === 0" class="no-data-message">
+                  暂无关系数据
+                </div>
+                
+                <div v-else class="relationships-list">
+                  <div v-for="(rel, index) in entityRelationships" :key="index" class="relationship-edit-row">
+                    <div class="relationship-direction">
+                      <i :class="rel.direction === 'outgoing' ? 'fas fa-arrow-right' : 'fas fa-arrow-left'"></i>
+                    </div>
+                    <div class="relationship-type">{{ getRelationshipTypeName(rel.type) }}</div>
+                    <div class="related-entity">{{ rel.target.name }}</div>
+                    <button @click="removeRelationship(index)" class="remove-relationship-btn">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="edit-modal-footer">
+              <button @click="cancelEdit" class="btn cancel-btn">取消</button>
+              <button @click="saveEntityChanges" class="btn save-btn">保存</button>
             </div>
           </div>
         </div>
-        <!-- Entity Edit Form Modal -->
-        
-        <button class="close-detail" @click="clearSelection">
-          <i class="fas fa-times"></i>
-        </button>
+        <!-- Place this at the root level of your template, outside the detail-panel -->
+        <div v-if="showAddRelationship" class="add-relationship-modal">
+          <div class="add-relationship-content">
+            <div class="modal-header">
+              <h3>添加关系</h3>
+              <button @click="showAddRelationship = false" class="close-btn">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+            
+            <div class="modal-body">
+              <div class="form-group">
+                <label>关系方向</label>
+                <div class="direction-selector">
+                  <label class="radio-option">
+                    <input type="radio" v-model="newRelationship.direction" value="outgoing">
+                    <span>出发 ({{ editFormData.name }} → 目标实体)</span>
+                  </label>
+                  <label class="radio-option">
+                    <input type="radio" v-model="newRelationship.direction" value="incoming">
+                    <span>接收 (目标实体 → {{ editFormData.name }})</span>
+                  </label>
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label>关系类型</label>
+                <div class="type-selector">
+                  <select v-model="selectedRelationshipTypeCategory" class="form-input category-select">
+                    <option value="">所有分类</option>
+                    <option v-for="category in relationshipTypeCategories" :key="category">
+                      {{ category }}
+                    </option>
+                  </select>
+                  
+                  <select v-model="newRelationship.type" class="form-input type-select">
+                    <option value="">请选择关系类型</option>
+                    <option v-for="type in filteredRelationshipTypes" :key="type.type_code" :value="type.type_code">
+                      {{ type.type_name }}
+                    </option>
+                  </select>
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label>目标实体</label>
+                <div class="entity-search-wrapper">
+                  <input 
+                    type="text" 
+                    v-model="targetEntitySearch" 
+                    @input="searchTargetEntities"
+                    placeholder="搜索实体..." 
+                    class="form-input search-input"
+                  >
+                  
+                  <div v-if="searchResults.length > 0" class="search-results">
+                    <div 
+                      v-for="entity in searchResults" 
+                      :key="entity.id" 
+                      class="search-result-item"
+                      @click="selectTargetEntity(entity)"
+                    >
+                      <span>{{ entity.name }}</span>
+                      <small>({{ getEntityTypeName(entity.type) }})</small>
+                    </div>
+                  </div>
+                </div>
+                
+                <div v-if="newRelationship.targetEntity" class="selected-target-entity">
+                  <span>{{ newRelationship.targetEntity.name }}</span>
+                  <button @click="newRelationship.targetEntity = null" class="clear-entity-btn">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div class="modal-footer">
+              <button @click="showAddRelationship = false" class="btn cancel-btn">取消</button>
+              <button 
+                @click="addRelationship" 
+                class="btn save-btn" 
+                :disabled="!isNewRelationshipValid"
+              >
+                添加
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
+      <!-- Entity Edit Form Modal -->
+      
+      <button class="close-detail" @click="clearSelection">
+        <i class="fas fa-times"></i>
+      </button>
     </div>
-    </div>
+  </div>
 </template>
   
   <script>
@@ -320,7 +333,7 @@
       };
     },
     computed: {
-      entityTypes() {
+      uniqueNodeTypes() {
         return [...new Set(this.nodes.map(node => node.type))];
       },
       
@@ -389,6 +402,10 @@
         // });
       },
       
+      getEntityTypeIcon(typeCode) {
+        const type = this.entityTypes.find(t => t.type_code === typeCode);
+        return type && type.icon ? `fas ${type.icon}` : 'fas fa-circle';
+      },
       async selectEntity(entity) {
         this.selectedEntity = entity;
         
@@ -722,19 +739,49 @@
         return type ? type.type_name : typeCode;
       },
       
-      searchTargetEntities() {
-        if (!this.targetEntitySearch) {
+      async searchTargetEntities() {
+        if (!this.targetEntitySearch || this.targetEntitySearch.length < 2) {
           this.searchResults = [];
           return;
         }
         
-        const query = this.targetEntitySearch.toLowerCase();
-        this.searchResults = this.nodes
-          .filter(node => 
-            node.id !== this.editingEntity.id && 
-            node.name.toLowerCase().includes(query)
-          )
-          .slice(0, 5); // Limit to 5 results
+        try {
+          // First try to search entities from current loaded nodes (faster)
+          const query = this.targetEntitySearch.toLowerCase();
+          const localResults = this.nodes
+            .filter(node => 
+              node.id !== this.editingEntity.id && 
+              node.name.toLowerCase().includes(query)
+            )
+            .slice(0, 10); // Limit to 10 results
+          
+          if (localResults.length > 0) {
+            this.searchResults = localResults;
+            return;
+          }
+          
+          // If no local results, try to search from Neo4j
+          const response = await fetch(`/api/v1/entities/search?query=${encodeURIComponent(this.targetEntitySearch)}&limit=10`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            this.searchResults = data;
+          } else {
+            console.error('Error searching entities:', response.statusText);
+            // Fall back to local search only
+            this.searchResults = localResults;
+          }
+        } catch (error) {
+          console.error('Error searching entities:', error);
+          // In case of error, try local search
+          const query = this.targetEntitySearch.toLowerCase();
+          this.searchResults = this.nodes
+            .filter(node => 
+              node.id !== this.editingEntity.id && 
+              node.name.toLowerCase().includes(query)
+            )
+            .slice(0, 10);
+        }
       },
       
       selectTargetEntity(entity) {
@@ -745,6 +792,18 @@
       
       addRelationship() {
         if (!this.isNewRelationshipValid) return;
+        
+        // Check if relationship already exists to prevent duplicates
+        const isDuplicate = this.entityRelationships.some(rel => 
+          rel.direction === this.newRelationship.direction &&
+          rel.type === this.newRelationship.type &&
+          rel.target.id === this.newRelationship.targetEntity.id
+        );
+        
+        if (isDuplicate) {
+          alert('该关系已存在！');
+          return;
+        }
         
         const relationship = {
           id: 'temp-' + Date.now(),
@@ -763,6 +822,8 @@
         };
         
         this.showAddRelationship = false;
+        this.searchResults = [];
+        this.targetEntitySearch = '';
       },
       
       removeRelationship(index) {
@@ -1587,5 +1648,189 @@
     border-radius: 4px;
     color: #0277bd;
   }
+
+  /* Add these styles to the <style> section in Graph.vue */
+  .form-section {
+    margin-bottom: 24px;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    padding: 16px;
+    background-color: #f9f9f9;
+  }
+
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+    color: #333;
+  }
+
+  .property-actions, .relationship-actions {
+    margin-bottom: 12px;
+  }
+
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+
+  .add-btn {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .add-btn:hover {
+    background-color: #c8e6c9;
+  }
+
+  .remove-btn {
+    background: none;
+    color: #d32f2f;
+    padding: 4px 8px;
+  }
+
+  .remove-btn:hover {
+    background-color: #ffebee;
+  }
+
+  .properties-list, .relationships-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    background-color: #fff;
+  }
+
+  .property-edit-row, .relationship-edit-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .property-edit-row:last-child, .relationship-edit-row:last-child {
+    border-bottom: none;
+  }
+
+  .property-key {
+    width: 120px;
+    font-weight: 500;
+    color: #555;
+  }
+
+  .property-value-input {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .no-data-message {
+    padding: 12px;
+    text-align: center;
+    color: #999;
+    font-style: italic;
+    background-color: #fff;
+    border: 1px dashed #ddd;
+    border-radius: 4px;
+  }
+
+  .radio-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+  }
+
+  .entity-search-wrapper {
+    position: relative;
+  }
+
+  .search-input {
+    width: 100%;
+    padding-right: 30px;
+  }
+
+  .search-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    max-height: 200px;
+    overflow-y: auto;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .search-result-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+    transition: background-color 0.2s;
+  }
+
+  .search-result-item:last-child {
+    border-bottom: none;
+  }
+
+  .search-result-item:hover {
+    background-color: #f5f5f5;
+  }
+
+  .search-result-item i {
+    font-size: 14px;
+    width: 20px;
+    text-align: center;
+  }
+
+  .search-result-item small {
+    color: #999;
+    margin-left: auto;
+  }
+
+  .selected-target-entity {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    background-color: #e3f2fd;
+    border-radius: 4px;
+    color: #0277bd;
+  }
+
+  .clear-entity-btn {
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    margin-left: auto;
+  }
+
+  .clear-entity-btn:hover {
+    color: #d32f2f;
+  }
+  .save-btn:disabled {
+    background-color: #a5d6a7;
+    cursor: not-allowed;
+  }
+
   }
   </style>
