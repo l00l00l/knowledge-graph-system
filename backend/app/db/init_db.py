@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from .sqlite_db import engine, Base, SessionLocal
-from .models import EntityType
+from .models import EntityType, RelationshipType
 
 def init_db():
     """初始化数据库表"""

@@ -10,7 +10,7 @@ async def test_graph_endpoint():
     """Simple test endpoint to verify the router is accessible"""
     return {"status": "success", "message": "Graph API is working"}
 
-@router.get("/", response_model=Dict[str, Any])
+@router.get("", response_model=Dict[str, Any])
 async def get_knowledge_graph(db: Neo4jDatabase = Depends(get_db)):
     """获取整个知识图谱数据用于可视化"""
     try:
