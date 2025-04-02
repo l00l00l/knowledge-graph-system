@@ -153,7 +153,7 @@
               
               <div class="form-section">
                 <h4 class="section-title">关系</h4>
-                <button @click="openAddRelationshipDialog = true" class="add-relationship-btn">
+                <button @click="showAddRelationshipDialog" class="add-relationship-btn">
                   <i class="fas fa-plus"></i> 添加关系
                 </button>
                 
@@ -187,7 +187,7 @@
           <div class="add-relationship-content">
             <div class="modal-header">
               <h3>添加关系</h3>
-              <button @click="openAddRelationshipDialog = false" class="close-btn">
+              <button @click="showAddRelationship = false" class="close-btn">
                 <i class="fas fa-times"></i>
               </button>
             </div>
@@ -487,18 +487,7 @@
         return value;
       },
       
-      openAddRelationshipDialog () {
-        // 重置关系类型选择
-        this.selectedRelationshipTypeCategory = '';
-        this.newRelationship = {
-          direction: 'outgoing',
-          type: '',
-          targetEntity: null
-        };
-        
-        // 显示添加关系对话框
-        this.showAddRelationship = true;
-      },
+
       editEntity() {
         console.log('Edit entity:', this.selectedEntity);
         this.isEditing = true;
@@ -907,7 +896,21 @@
         this.searchResults = [];
         this.targetEntitySearch = '';
       },
-      
+      resetRelationshipForm() {
+        // 重置关系类型选择
+        this.selectedRelationshipTypeCategory = '';
+        this.newRelationship = {
+          direction: 'outgoing',
+          type: '',
+          targetEntity: null
+        };
+      },
+      showAddRelationshipDialog() {
+        
+        this.resetRelationshipForm();
+        this.showAddRelationship = true;
+        
+      },
       removeRelationship(index) {
         if (confirm('确定要删除这个关系吗？')) {
           this.entityRelationships.splice(index, 1);
