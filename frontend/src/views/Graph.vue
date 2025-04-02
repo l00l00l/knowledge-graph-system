@@ -604,8 +604,25 @@
       },
       
       handleResize() {
-        console.log('Window resized, reinitializing visualization');
-        this.initVisualization();
+        if (this.svg) {
+          const container = this.$refs.graphContainer;
+          if (container) {
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            // 更新SVG尺寸
+            this.svg
+              .attr('width', '100%')
+              .attr('height', height);
+            
+            // 更新力模拟的中心力
+            if (this.simulation) {
+              this.simulation.force('center', d3.forceCenter(width / 2, height / 2))
+                .alpha(0.3) // 重新加热模拟以触发调整
+                .restart();
+            }
+          }
+        }
       },
 
       handleEntityCategoryChange() {
@@ -713,11 +730,15 @@
         // Create SVG
         const svg = d3.select(container)
           .append('svg')
-          .attr('width', width)
+          .attr('width', '100%')  // 从固定宽度改为100%
           .attr('height', height)
           .attr('class', 'graph-svg')
-          .style('position', 'absolute');
+          .style('position', 'absolute')
+          .style('left', 0)     // 确保从左边缘开始
+          .style('top', 0);     // 确保从顶部边缘开始
         
+        // 保存svg引用用于后续调整大小
+        this.svg = svg;
         // Add zoom functionality
         const zoom = d3.zoom()
           .scaleExtent([0.1, 4])
@@ -1204,9 +1225,6 @@
   .graph-container {
     width: 100%;
     height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     color: #999;
     font-style: italic;
   }
