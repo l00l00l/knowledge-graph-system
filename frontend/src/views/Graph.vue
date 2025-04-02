@@ -301,12 +301,6 @@
         editingEntity: null,
         editFormData: {},
         availableEntityTypes: [],
-        entityTypes: [],
-        relationshipTypes: [],
-        entityTypeCategories: [],
-        relationshipTypeCategories: [],
-        selectedEntityTypeCategory: '',
-        selectedRelationshipTypeCategory: '',
         showAddRelationship: false,
         newRelationship: {
           direction: 'outgoing',
@@ -329,7 +323,57 @@
           { id: 'r2', source: 'n2', target: 'n1', type: 'created' },
           { id: 'r3', source: 'n4', target: 'n1', type: 'related_to' },
           { id: 'r4', source: 'n5', target: 'n4', type: 'created' }
-        ]
+        ],
+        // 静态实体类型数据
+        entityTypes: [
+          // 基础类型
+          {"id": 1, "type_code": "concept", "type_name": "概念", "category": "基础类型", "icon": "fa-lightbulb", "color": "#d62728"},
+          {"id": 2, "type_code": "person", "type_name": "人物", "category": "基础类型", "icon": "fa-user", "color": "#ff7f0e"},
+          {"id": 3, "type_code": "organization", "type_name": "组织", "category": "基础类型", "icon": "fa-building", "color": "#1f77b4"},
+          {"id": 4, "type_code": "location", "type_name": "地点", "category": "基础类型", "icon": "fa-map-marker", "color": "#2ca02c"},
+          {"id": 5, "type_code": "time", "type_name": "时间", "category": "基础类型", "icon": "fa-clock", "color": "#9467bd"},
+          {"id": 6, "type_code": "event", "type_name": "事件", "category": "基础类型", "icon": "fa-calendar", "color": "#8c564b"},
+          
+          // 领域类型
+          {"id": 7, "type_code": "technology", "type_name": "技术", "category": "领域类型", "icon": "fa-microchip", "color": "#e377c2"},
+          {"id": 8, "type_code": "theory", "type_name": "理论", "category": "领域类型", "icon": "fa-book", "color": "#7f7f7f"},
+          {"id": 9, "type_code": "method", "type_name": "方法", "category": "领域类型", "icon": "fa-cogs", "color": "#bcbd22"},
+          {"id": 10, "type_code": "problem", "type_name": "问题", "category": "领域类型", "icon": "fa-question-circle", "color": "#17becf"},
+          {"id": 11, "type_code": "tool", "type_name": "工具", "category": "领域类型", "icon": "fa-wrench", "color": "#9edae5"},
+          {"id": 12, "type_code": "solution", "type_name": "解决方案", "category": "领域类型", "icon": "fa-check-circle", "color": "#ffbb78"},
+          
+          // 个人类型
+          {"id": 13, "type_code": "note", "type_name": "笔记", "category": "个人类型", "icon": "fa-sticky-note", "color": "#aec7e8"},
+          {"id": 14, "type_code": "question", "type_name": "问题", "category": "个人类型", "icon": "fa-question", "color": "#ffbb78"},
+          {"id": 15, "type_code": "idea", "type_name": "想法", "category": "个人类型", "icon": "fa-lightbulb", "color": "#98df8a"},
+          {"id": 16, "type_code": "goal", "type_name": "目标", "category": "个人类型", "icon": "fa-bullseye", "color": "#ff9896"},
+          {"id": 17, "type_code": "plan", "type_name": "计划", "category": "个人类型", "icon": "fa-tasks", "color": "#c5b0d5"}
+        ],
+        
+        // 静态关系类型数据
+        relationshipTypes: [
+          // 基础类型
+          {"id": 1, "type_code": "is_a", "type_name": "是一种", "category": "基础类型", "icon": "fa-sitemap", "color": "#666666"},
+          {"id": 2, "type_code": "part_of", "type_name": "是部分", "category": "基础类型", "icon": "fa-puzzle-piece", "color": "#666666"},
+          {"id": 3, "type_code": "attribute_of", "type_name": "是属性", "category": "基础类型", "icon": "fa-tag", "color": "#666666"},
+          {"id": 4, "type_code": "instance_of", "type_name": "是实例", "category": "基础类型", "icon": "fa-copy", "color": "#666666"},
+          
+          // 领域类型
+          {"id": 5, "type_code": "causes", "type_name": "导致", "category": "领域类型", "icon": "fa-arrow-right", "color": "#666666"},
+          {"id": 6, "type_code": "influences", "type_name": "影响", "category": "领域类型", "icon": "fa-exchange-alt", "color": "#666666"},
+          {"id": 7, "type_code": "depends_on", "type_name": "依赖于", "category": "领域类型", "icon": "fa-link", "color": "#666666"},
+          {"id": 8, "type_code": "contradicts", "type_name": "矛盾于", "category": "领域类型", "icon": "fa-not-equal", "color": "#666666"},
+          
+          // 个人类型
+          {"id": 9, "type_code": "similar_to", "type_name": "类似于", "category": "个人类型", "icon": "fa-equals", "color": "#666666"},
+          {"id": 10, "type_code": "reminds_of", "type_name": "提醒我", "category": "个人类型", "icon": "fa-bell", "color": "#666666"},
+          {"id": 11, "type_code": "inspires", "type_name": "启发", "category": "个人类型", "icon": "fa-lightbulb", "color": "#666666"},
+          {"id": 12, "type_code": "confuses", "type_name": "困惑", "category": "个人类型", "icon": "fa-question-circle", "color": "#666666"}
+        ],
+        
+        // 初始化分类选择器
+        entityTypeCategories: ["基础类型", "领域类型", "个人类型"],
+        relationshipTypeCategories: ["基础类型", "领域类型", "个人类型"]
       };
     },
     computed: {
@@ -339,33 +383,35 @@
       
 
       filteredEntityTypes() {
-        console.log('Computing filtered entity types. Category:', this.selectedEntityTypeCategory);
-        console.log('Available entity types:', this.entityTypes);
+        // 添加调试信息
+        console.log('Computing filtered entity types');
+        console.log('Selected category:', this.selectedEntityTypeCategory);
+        console.log('All entity types:', this.entityTypes);
         
-        if (!this.entityTypes || !Array.isArray(this.entityTypes)) {
-          console.error('Entity types is not an array:', this.entityTypes);
-          return [];
-        }
-        
+        // 如果没有选择分类，返回所有类型
         if (!this.selectedEntityTypeCategory) return this.entityTypes;
         
+        // 严格匹配分类
         const filtered = this.entityTypes.filter(type => type.category === this.selectedEntityTypeCategory);
+        
+        // 查看过滤结果
         console.log('Filtered entity types:', filtered);
         return filtered;
       },
       
       filteredRelationshipTypes() {
-        console.log('Computing filtered relationship types. Category:', this.selectedRelationshipTypeCategory);
-        console.log('Available relationship types:', this.relationshipTypes);
+        // 添加调试信息
+        console.log('Computing filtered relationship types');
+        console.log('Selected category:', this.selectedRelationshipTypeCategory);
+        console.log('All relationship types:', this.relationshipTypes);
         
-        if (!this.relationshipTypes || !Array.isArray(this.relationshipTypes)) {
-          console.error('Relationship types is not an array:', this.relationshipTypes);
-          return [];
-        }
-        
+        // 如果没有选择分类，返回所有类型
         if (!this.selectedRelationshipTypeCategory) return this.relationshipTypes;
         
+        // 严格匹配分类
         const filtered = this.relationshipTypes.filter(type => type.category === this.selectedRelationshipTypeCategory);
+        
+        // 查看过滤结果
         console.log('Filtered relationship types:', filtered);
         return filtered;
       },
@@ -496,14 +542,14 @@
         // 重置分类选择器
         this.selectedEntityTypeCategory = '';
         
-        // 对应类型找到对应的分类
-        if (this.selectedEntity.type && this.entityTypes && this.entityTypes.length > 0) {
+        // 根据当前实体类型查找对应的分类
+        if (this.selectedEntity.type && this.entityTypes.length > 0) {
           const entityType = this.entityTypes.find(t => t.type_code === this.selectedEntity.type);
           if (entityType) {
             console.log('Found entity type:', entityType);
             this.selectedEntityTypeCategory = entityType.category;
           } else {
-            console.warn('Entity type not found in available types:', this.selectedEntity.type);
+            console.warn('Entity type not found:', this.selectedEntity.type);
           }
         }
         
@@ -597,71 +643,6 @@
         }
       },
 
-      async fetchEntityTypes() {
-        try {
-          console.log('Fetching entity types...');
-          const response = await fetch('/api/v1/entity-types');
-          
-          if (!response.ok) {
-            throw new Error(`获取实体类型失败: ${response.status} ${response.statusText}`);
-          }
-          
-          // 记录原始响应内容以进行调试
-          const responseText = await response.text();
-          console.log('Entity types raw response:', responseText);
-          
-          // 解析JSON
-          const data = JSON.parse(responseText);
-          console.log('Entity types parsed data:', data);
-          
-          // 验证数据格式
-          if (!Array.isArray(data)) {
-            throw new Error('实体类型返回格式不正确，期望数组但收到: ' + typeof data);
-          }
-          
-          // 更新数据
-          this.entityTypes = data;
-          this.entityTypeCategories = [...new Set(data.map(type => type.category))];
-          console.log('Entity type categories:', this.entityTypeCategories);
-        } catch (error) {
-          console.error('Error fetching entity types:', error);
-          // 在UI显示错误
-          alert('加载实体类型失败: ' + error.message);
-        }
-      },
-
-      async fetchRelationshipTypes() {
-        try {
-          console.log('Fetching relationship types...');
-          const response = await fetch('/api/v1/relationship-types');
-          
-          if (!response.ok) {
-            throw new Error(`获取关系类型失败: ${response.status} ${response.statusText}`);
-          }
-          
-          // 记录原始响应内容以进行调试
-          const responseText = await response.text();
-          console.log('Relationship types raw response:', responseText);
-          
-          // 解析JSON
-          const data = JSON.parse(responseText);
-          console.log('Relationship types parsed data:', data);
-          
-          // 验证数据格式
-          if (!Array.isArray(data)) {
-            throw new Error('关系类型返回格式不正确，期望数组但收到: ' + typeof data);
-          }
-          
-          // 更新数据
-          this.relationshipTypes = data;
-          this.relationshipTypeCategories = [...new Set(data.map(type => type.category))];
-          console.log('Relationship type categories:', this.relationshipTypeCategories);
-        } catch (error) {
-          console.error('Error fetching relationship types:', error);
-          // 在UI显示错误
-          alert('加载关系类型失败: ' + error.message);
-        }
-      },
       initVisualization() {
         // Clear previous visualization
         const container = this.$refs.graphContainer;
@@ -904,12 +885,21 @@
           type: '',
           targetEntity: null
         };
+        
+        // 默认选择"基础类型"分类以改善用户体验
+        this.selectedRelationshipTypeCategory = '基础类型';
+        
+        console.log('Relationship form reset');
+        console.log('Selected relationship type category:', this.selectedRelationshipTypeCategory);
       },
       showAddRelationshipDialog() {
+        console.log('Opening relationship dialog');
         
+        // 重置关系表单
         this.resetRelationshipForm();
-        this.showAddRelationship = true;
         
+        // 显示对话框
+        this.showAddRelationship = true;
       },
       removeRelationship(index) {
         if (confirm('确定要删除这个关系吗？')) {
@@ -1031,11 +1021,17 @@
         return colorMap[type] || '#aaa';
       }
     },
-    mounted() {
+    async mounted() {
       console.log('Graph component mounted, fetching graph data...');
-      this.fetchEntityTypes();
-      this.fetchGraphData();
-      this.fetchRelationshipTypes();
+      //this.fetchEntityTypes();
+      await this.fetchGraphData();
+      //this.fetchRelationshipTypes();
+      // 初始化分类数据 - 这里直接从静态数据计算出来
+      this.entityTypeCategories = [...new Set(this.entityTypes.map(type => type.category))];
+      this.relationshipTypeCategories = [...new Set(this.relationshipTypes.map(type => type.category))];
+      
+      console.log('Entity type categories:', this.entityTypeCategories);
+      console.log('Relationship type categories:', this.relationshipTypeCategories);
       window.addEventListener('resize', this.handleResize);
     },
     beforeUnmount() {
