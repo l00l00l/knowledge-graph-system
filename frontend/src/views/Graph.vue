@@ -105,12 +105,9 @@
                 <div class="form-group">
                   <label>类型</label>
                   <select v-model="editFormData.type" class="form-input">
-                    <option value="concept">概念</option>
-                    <option value="person">人物</option>
-                    <option value="organization">组织</option>
-                    <option value="location">地点</option>
-                    <option value="time">时间</option>
-                    <option value="event">事件</option>
+                    <option v-for="type in availableEntityTypes" :key="type.type_code" :value="type.type_code">
+                      {{ type.type_name }}
+                    </option>
                   </select>
                 </div>
                 
@@ -170,6 +167,7 @@
         isEditing: false,
         editingEntity: null,
         editFormData: {},
+        availableEntityTypes: [],
         // Mock nodes data for testing
         nodes: [
           { id: 'n1', name: '知识图谱', type: 'concept', description: '知识图谱是一种表示知识的图结构', properties: { domain: '人工智能', popularity: '高' } },
@@ -393,6 +391,20 @@
         }
       },
 
+      async fetchEntityTypes() {
+        try {
+          const response = await fetch('/api/v1/entity-types');
+          if (response.ok) {
+            const types = await response.json();
+            this.availableEntityTypes = types;
+            console.log('Loaded entity types:', types);
+          } else {
+            console.error('Failed to load entity types:', response.statusText);
+          }
+        } catch (error) {
+          console.error('Error fetching entity types:', error);
+        }
+      },
       initVisualization() {
         // Clear previous visualization
         const container = this.$refs.graphContainer;
@@ -584,7 +596,7 @@
           this.editingEntity = null;
           
           // Reinitialize visualization
-          this.updateVisualization();
+          this.fetchGraphData();
           
           // Show success message
           alert('实体更新成功');
@@ -647,6 +659,7 @@
     },
     mounted() {
       console.log('Graph component mounted, fetching graph data...');
+      this.fetchEntityTypes();
       this.fetchGraphData();
       window.addEventListener('resize', this.handleResize);
     },

@@ -4,6 +4,17 @@ import datetime
 import json
 from .sqlite_db import Base
 
+
+class EntityType(Base):
+    """实体类型定义"""
+    __tablename__ = "entity_types"
+    
+    id = Column(Integer, primary_key=True)
+    type_code = Column(String, unique=True, index=True)  # 类型编码，如 'person'
+    type_name = Column(String)  # 类型中文名称，如 '人物'
+    icon = Column(String, nullable=True)  # 图标类，如 'fa-user'
+    color = Column(String, nullable=True)  # 颜色代码，如 '#ff7f0e'
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 class Document(Base):
     """文档模型"""
     __tablename__ = "documents"

@@ -157,6 +157,8 @@ class Neo4jDatabase(DatabaseInterface[T]):
         # 将Pydantic模型转为字典
         entity_dict = entity.dict()
         entity_id = str(entity.id)
+        
+        # 只更新特定属性，而不是替换整个节点
         props = {k: v for k, v in entity_dict.items() if v is not None and k not in ['id', 'type']}
         
         # 将复杂类型转换为JSON字符串
@@ -167,23 +169,51 @@ class Neo4jDatabase(DatabaseInterface[T]):
             elif isinstance(v, UUID):
                 props[k] = str(v)
         
-        # 构建Cypher查询
+        # 构建Cypher查询 - 修改为更精确的更新
         query = """
         MATCH (e:Entity {id: $id})
-        SET e = $props
-        SET e:%s
+        SET e.name = $name,
+            e.description = $description,
+            e.properties = $properties
         RETURN e
-        """ % entity.type
+        """
         
         params = {
             "id": entity_id,
-            "props": props
+            "name": entity.name,
+            "description": entity.description,
+            "properties": json.dumps(entity.properties)
         }
         
         try:
             async with self.driver.session(database=self.database) as session:
                 result = await session.run(query, **params)
                 record = await result.single()
+                
+                # 如果需要更新标签（即实体类型发生变化）
+                type_query = """
+                MATCH (e:Entity {id: $id})
+                CALL apoc.cypher.run("MATCH (e:Entity {id: $_id}) 
+                                    REMOVE e:" + $old_labels + " 
+                                    SET e:" + $new_label, 
+                                    {_id: $id, old_labels: $old_labels, new_label: $new_label})
+                YIELD value
+                RETURN e
+                """
+                
+                # 假设我们已经知道所有可能的类型
+                types = ["person", "organization", "location", "concept", "time", "event"]
+                old_labels = ":".join([t for t in types if t != entity.type])
+                
+                type_params = {
+                    "id": entity_id,
+                    "old_labels": old_labels,
+                    "new_label": entity.type
+                }
+                
+                # 执行类型更新
+                await session.run(type_query, **type_params)
+                
                 if record:
                     print(f"Successfully updated entity: {entity.name}")
                     return entity
