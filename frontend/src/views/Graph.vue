@@ -105,22 +105,29 @@
                   <input type="text" v-model="editFormData.name" class="form-input">
                 </div>
                 
+                <!-- 在edit-modal-body中的实体类型选择器部分 -->
                 <div class="form-group">
                   <label>类型</label>
                   <div class="type-selector">
-                    <select v-model="selectedEntityTypeCategory" class="form-input category-select">
-                      <option value="">所有分类</option>
-                      <option v-for="category in entityTypeCategories" :key="category">
-                        {{ category }}
-                      </option>
-                    </select>
+                    <div>
+                      <span class="type-selector-label">分类</span>
+                      <select v-model="selectedEntityTypeCategory" class="category-select">
+                        <option value="">所有分类</option>
+                        <option v-for="category in entityTypeCategories" :key="category">
+                          {{ category }}
+                        </option>
+                      </select>
+                    </div>
                     
-                    <select v-model="editFormData.type" class="form-input type-select">
-                      <option value="">请选择类型</option>
-                      <option v-for="type in filteredEntityTypes" :key="type.type_code" :value="type.type_code">
-                        {{ type.type_name }}
-                      </option>
-                    </select>
+                    <div>
+                      <span class="type-selector-label">具体类型</span>
+                      <select v-model="editFormData.type" class="type-select">
+                        <option value="">请选择类型</option>
+                        <option v-for="type in filteredEntityTypes" :key="type.type_code" :value="type.type_code">
+                          {{ type.type_name }}
+                        </option>
+                      </select>
+                    </div>
                   </div>
                 </div>
                 
@@ -207,22 +214,29 @@
                 </div>
               </div>
               
+              <!-- 在添加关系对话框中的类型选择器部分 -->
               <div class="form-group">
                 <label>关系类型</label>
                 <div class="type-selector">
-                  <select v-model="selectedRelationshipTypeCategory" class="form-input category-select">
-                    <option value="">所有分类</option>
-                    <option v-for="category in relationshipTypeCategories" :key="category">
-                      {{ category }}
-                    </option>
-                  </select>
+                  <div>
+                    <span class="type-selector-label">分类</span>
+                    <select v-model="selectedRelationshipTypeCategory" class="category-select">
+                      <option value="">所有分类</option>
+                      <option v-for="category in relationshipTypeCategories" :key="category">
+                        {{ category }}
+                      </option>
+                    </select>
+                  </div>
                   
-                  <select v-model="newRelationship.type" class="form-input type-select">
-                    <option value="">请选择关系类型</option>
-                    <option v-for="type in filteredRelationshipTypes" :key="type.type_code" :value="type.type_code">
-                      {{ type.type_name }}
-                    </option>
-                  </select>
+                  <div>
+                    <span class="type-selector-label">关系类型</span>
+                    <select v-model="newRelationship.type" class="type-select">
+                      <option value="">请选择关系类型</option>
+                      <option v-for="type in filteredRelationshipTypes" :key="type.type_code" :value="type.type_code">
+                        {{ type.type_name }}
+                      </option>
+                    </select>
+                  </div>
                 </div>
               </div>
               
@@ -1557,10 +1571,23 @@
     align-items: center;
   }
 
+  .edit-modal-content {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    width: 600px; /* 增加宽度 */
+    max-width: 95%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-body {
+    padding: 24px;
+  }
   .edit-modal-body {
-    padding: 20px;
+    padding: 24px;
     overflow-y: auto;
-    max-height: 60vh;
+    max-height: 70vh;
   }
 
   .edit-modal-footer {
@@ -1572,23 +1599,36 @@
   }
 
   .form-group {
-    margin-bottom: 15px;
+    margin-bottom: 20px;
   }
 
   .form-group label {
     display: block;
-    margin-bottom: 5px;
+    margin-bottom: 8px;
     font-weight: 500;
+    color: #444;
   }
 
   .form-input {
     width: 100%;
-    padding: 8px 12px;
+    padding: 10px 14px;
     border: 1px solid #ddd;
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 14px;
+    background-color: white;
+    transition: border-color 0.2s, box-shadow 0.2s;
   }
 
+  .form-input:focus {
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+    outline: none;
+  }
+
+  textarea.form-input {
+    min-height: 80px;
+    resize: vertical;
+  }
   .property-edit-row {
     display: flex;
     align-items: center;
@@ -1639,19 +1679,34 @@
 
   /* Type selector styles */
   .type-selector {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* 从横向变为网格布局 */
+    gap: 16px;
+    margin-bottom: 16px;
   }
 
-  .category-select {
-    width: 40%;
+  .category-select, .type-select {
+    width: 100%;
+    height: 40px; /* 增加高度提高可操作性 */
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    background-color: white;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .category-select:focus, .type-select:focus {
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+    outline: none;
   }
 
-  .type-select {
-    width: 60%;
+  .type-selector-label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 6px;
+    color: #555;
   }
-
   /* Relationship section styles */
   .relationships-section {
     margin-top: 20px;
@@ -1733,18 +1788,21 @@
   .add-relationship-content {
     background-color: white;
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    width: 500px;
-    max-width: 90%;
-    max-height: 90vh;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    width: 550px;
+    max-width: 95%;
     display: flex;
     flex-direction: column;
   }
 
   .direction-selector {
     display: flex;
-    gap: 20px;
-    margin-bottom: 10px;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+    background-color: #f5f7fa;
+    padding: 16px;
+    border-radius: 6px;
   }
 
   .entity-search {
@@ -1788,20 +1846,21 @@
 
   /* Add these styles to the <style> section in Graph.vue */
   .form-section {
-    margin-bottom: 24px;
-    border: 1px solid #eee;
-    border-radius: 6px;
-    padding: 16px;
-    background-color: #f9f9f9;
+    margin-bottom: 28px;
+    border: 1px solid #eaeaea;
+    border-radius: 8px;
+    padding: 20px;
+    background-color: #fafafa;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   }
 
   .section-title {
     font-size: 16px;
     font-weight: 600;
-    margin-bottom: 16px;
-    padding-bottom: 8px;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
     border-bottom: 1px solid #eee;
-    color: #333;
+    color: #444;
   }
 
   .property-actions, .relationship-actions {
@@ -1885,11 +1944,21 @@
   .radio-option {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-    cursor: pointer;
+    gap: 10px;
+    margin-bottom: 6px;
+    padding: 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
   }
 
+  .radio-option:hover {
+    background-color: #edf2f7;
+  }
+
+  .radio-option input[type="radio"] {
+    width: 18px;
+    height: 18px;
+  }
   .entity-search-wrapper {
     position: relative;
   }
