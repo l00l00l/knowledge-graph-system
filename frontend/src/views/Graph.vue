@@ -302,6 +302,8 @@
         editFormData: {},
         availableEntityTypes: [],
         showAddRelationship: false,
+        selectedEntityTypeCategory: '',
+        selectedRelationshipTypeCategory: '',
         newRelationship: {
           direction: 'outgoing',
           type: '',
@@ -568,10 +570,7 @@
       editEntity() {
         console.log('Edit entity:', this.selectedEntity);
         this.isEditing = true;
-        this.editingEntity = JSON.parse(JSON.stringify(this.selectedEntity)); // 创建深拷贝
-        
-        // 重置分类选择器
-        this.selectedEntityTypeCategory = '';
+        this.editingEntity = JSON.parse(JSON.stringify(this.selectedEntity));
         
         this.editFormData = {
           name: this.selectedEntity.name,
@@ -580,25 +579,18 @@
           properties: {...this.selectedEntity.properties}
         };
         
+        // 重置并直接设置分类，不使用 setTimeout
+        this.selectedEntityTypeCategory = '';
+        
         // 根据当前实体类型查找对应的分类并设置
         if (this.selectedEntity.type && this.entityTypes.length > 0) {
-          console.log('Looking for entity type:', this.selectedEntity.type);
           const entityType = this.entityTypes.find(t => t.type_code === this.selectedEntity.type);
           if (entityType) {
-            console.log('Found entity type:', entityType);
-            
-            // 确保在下一个事件循环中更新分类选择器，以便Vue响应式系统可以正确更新
-            setTimeout(() => {
-              this.selectedEntityTypeCategory = entityType.category;
-              console.log('Updated selected entity category to:', this.selectedEntityTypeCategory);
-              this.$forceUpdate(); // 强制更新视图
-            }, 0);
-          } else {
-            console.warn('Entity type not found in available types:', this.selectedEntity.type);
+            // 直接设置分类变量，不需要 setTimeout 和 forceUpdate
+            this.selectedEntityTypeCategory = entityType.category;
+            console.log('Updated selected entity category to:', this.selectedEntityTypeCategory);
           }
         }
-        
-        console.log('Edit form data initialized:', this.editFormData);
       },
             
       traceKnowledge() {
@@ -934,15 +926,9 @@
           targetEntity: null
         };
         
-        // 先清空选择器，然后设置默认分类
-        this.selectedRelationshipTypeCategory = '';
-        
-        // 确保在下一个事件循环中更新分类选择器
-        setTimeout(() => {
-          this.selectedRelationshipTypeCategory = '基础类型';
-          console.log('Reset relationship category to:', this.selectedRelationshipTypeCategory);
-          this.$forceUpdate(); // 强制更新视图
-        }, 0);
+        // 直接设置默认分类，不使用 setTimeout
+        this.selectedRelationshipTypeCategory = '基础类型';
+        console.log('Reset relationship category to:', this.selectedRelationshipTypeCategory);
       },
       showAddRelationshipDialog() {
         console.log('Opening relationship dialog');
