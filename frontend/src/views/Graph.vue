@@ -137,6 +137,7 @@
                 </div>
               </div>
               
+              <!-- Replace the edit form "Properties" section with this improved version -->
               <div class="form-section">
                 <h4 class="section-title">属性</h4>
                 <button @click="addEntityProperty" class="add-property-btn">
@@ -157,7 +158,8 @@
                   </div>
                 </div>
               </div>
-              
+
+              <!-- Similarly update the "Relationships" section -->
               <div class="form-section">
                 <h4 class="section-title">关系</h4>
                 <button @click="showAddRelationshipDialog" class="add-relationship-btn">
@@ -175,7 +177,7 @@
                     </div>
                     <div class="relationship-type">{{ getRelationshipTypeName(rel.type) }}</div>
                     <div class="related-entity">{{ rel.target.name }}</div>
-                    <button @click="removeRelationship(index)" class="remove-relationship-btn">
+                    <button @click="removeRelationship(index)" class="remove-property-btn">
                       <i class="fas fa-trash"></i>
                     </button>
                   </div>
@@ -1459,10 +1461,6 @@
     }
   }
   
-  @media (max-width: 768px) {
-    .graph-area {
-      height: 50vh;
-    }
 
   .empty-graph-message {
     display: flex;
@@ -1555,10 +1553,10 @@
   .edit-modal-content {
     background-color: white;
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    width: 500px;
-    max-width: 90%;
-    max-height: 90vh;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+    width: 650px;
+    max-width: 95%;
+    max-height: 85vh;
     display: flex;
     flex-direction: column;
   }
@@ -1570,48 +1568,75 @@
     justify-content: space-between;
     align-items: center;
   }
-
+  .edit-modal-header h3 {
+    font-size: 18px;
+    margin: 0;
+    color: #333;
+    font-weight: 600;
+  }
   .edit-modal-content {
-    background-color: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-    width: 600px; /* 增加宽度 */
-    max-width: 95%;
-    max-height: 90vh;
+    padding: 16px 24px;
+    border-bottom: 1px solid #eee;
     display: flex;
-    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #f8f9fa;
+    border-radius: 8px 8px 0 0;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #666;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+  .close-btn:hover {
+    background-color: #f0f0f0;
+    color: #333;
   }
   .modal-body {
     padding: 24px;
   }
+  
   .edit-modal-body {
     padding: 24px;
     overflow-y: auto;
-    max-height: 70vh;
+    max-height: calc(85vh - 130px);
   }
 
   .edit-modal-footer {
-    padding: 15px 20px;
+    padding: 16px 24px;
     border-top: 1px solid #eee;
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 12px;
+    background-color: #f8f9fa;
+    border-radius: 0 0 8px 8px;
   }
 
   .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 18px;
+  }
+
+  .form-group:last-child {
+    margin-bottom: 0;
   }
 
   .form-group label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     font-weight: 500;
     color: #444;
+    font-size: 14px;
   }
 
   .form-input {
     width: 100%;
-    padding: 10px 14px;
+    padding: 10px 12px;
     border: 1px solid #ddd;
     border-radius: 6px;
     font-size: 14px;
@@ -1632,33 +1657,44 @@
   .property-edit-row {
     display: flex;
     align-items: center;
-    margin-bottom: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0;
   }
-
+  .property-edit-row:last-child {
+    border-bottom: none;
+  }
   .property-key {
     width: 120px;
     font-weight: 500;
+    color: #555;
+    padding-right: 10px;
   }
 
   .property-value-input {
     flex: 1;
-    padding: 6px 10px;
+    padding: 8px 10px;
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 14px;
   }
 
   .add-property-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
     background-color: #e8f5e9;
     color: #2e7d32;
     border: none;
     border-radius: 4px;
-    padding: 6px 12px;
     font-size: 14px;
     cursor: pointer;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
+    transition: background-color 0.2s;
   }
-
+  .add-property-btn:hover {
+    background-color: #c8e6c9;
+  }
   .remove-property-btn {
     background: none;
     border: none;
@@ -1666,34 +1702,53 @@
     cursor: pointer;
     padding: 0 5px;
   }
+  .remove-property-btn:hover {
+    background-color: #ffebee;
+  }
 
   .save-btn {
+    padding: 8px 20px;
     background-color: #4caf50;
     color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
   }
-
+  .save-btn:hover {
+    background-color: #43a047;
+  }
   .cancel-btn {
-    background-color: #f0f0f0;
+    padding: 8px 20px;
+    background-color: #f5f5f5;
     color: #333;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
   }
-
+  .cancel-btn:hover {
+    background-color: #e0e0e0;
+  }
   /* Type selector styles */
   .type-selector {
     display: grid;
-    grid-template-columns: 1fr 1fr; /* 从横向变为网格布局 */
+    grid-template-columns: 1fr 1fr;
     gap: 16px;
-    margin-bottom: 16px;
+    margin-bottom: 0;
   }
 
   .category-select, .type-select {
     width: 100%;
-    height: 40px; /* 增加高度提高可操作性 */
+    height: 40px;
     padding: 8px 12px;
     border: 1px solid #ddd;
     border-radius: 6px;
     font-size: 14px;
     background-color: white;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition: border-color 0.2s;
   }
   .category-select:focus, .type-select:focus {
     border-color: #4a90e2;
@@ -1706,6 +1761,7 @@
     font-weight: 500;
     margin-bottom: 6px;
     color: #555;
+    font-size: 13px;
   }
   /* Relationship section styles */
   .relationships-section {
@@ -1715,16 +1771,23 @@
   }
 
   .add-relationship-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
     background-color: #e1f5fe;
     color: #0277bd;
     border: none;
     border-radius: 4px;
-    padding: 6px 12px;
     font-size: 14px;
     cursor: pointer;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
+    transition: background-color 0.2s;
   }
 
+  .add-relationship-btn:hover {
+    background-color: #b3e5fc;
+  }
   .no-relationships {
     color: #999;
     font-style: italic;
@@ -1740,10 +1803,8 @@
   .relationship-edit-row {
     display: flex;
     align-items: center;
-    padding: 8px;
-    background-color: #f5f5f5;
-    border-radius: 4px;
-    margin-bottom: 5px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0;
   }
 
   .relationship-direction {
@@ -1846,19 +1907,21 @@
 
   /* Add these styles to the <style> section in Graph.vue */
   .form-section {
-    margin-bottom: 28px;
+    margin-bottom: 24px;
     border: 1px solid #eaeaea;
     border-radius: 8px;
     padding: 20px;
-    background-color: #fafafa;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    background-color: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   }
-
+  .form-section:last-child {
+    margin-bottom: 0;
+  }
   .section-title {
     font-size: 16px;
     font-weight: 600;
-    margin-bottom: 18px;
-    padding-bottom: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
     border-bottom: 1px solid #eee;
     color: #444;
   }
@@ -1898,21 +1961,21 @@
     background-color: #ffebee;
   }
 
-  .properties-list, .relationships-list {
-    max-height: 200px;
-    overflow-y: auto;
+  .relationships-list {
+    background-color: white;
     border: 1px solid #eee;
-    border-radius: 4px;
-    background-color: #fff;
+    border-radius: 6px;
+    max-height: 180px;
+    overflow-y: auto;
   }
-
-  .property-edit-row, .relationship-edit-row {
-    display: flex;
-    align-items: center;
-    padding: 8px 12px;
-    border-bottom: 1px solid #f0f0f0;
+  .properties-list {
+    background-color: white;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    max-height: 180px;
+    overflow-y: auto;
   }
-
+  
   .property-edit-row:last-child, .relationship-edit-row:last-child {
     border-bottom: none;
   }
@@ -1932,14 +1995,13 @@
   }
 
   .no-data-message {
-    padding: 12px;
+    padding: 16px;
     text-align: center;
     color: #999;
     font-style: italic;
     background-color: #fff;
     border: 1px dashed #ddd;
     border-radius: 4px;
-  }
 
   .radio-option {
     display: flex;
