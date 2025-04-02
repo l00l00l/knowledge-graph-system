@@ -53,6 +53,10 @@ async def startup_event():
     """应用启动事件处理"""
     logger.info("初始化应用...")
     
+    # 显式调用init_db确保数据库表和初始数据已创建
+    from app.db.init_db import init_db
+    init_db()
+
     # 测试Neo4j连接
     from app.core.config import settings
     from app.db.neo4j_db import Neo4jDatabase

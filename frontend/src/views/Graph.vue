@@ -153,7 +153,7 @@
               
               <div class="form-section">
                 <h4 class="section-title">关系</h4>
-                <button @click="showAddRelationship = true" class="add-relationship-btn">
+                <button @click="openAddRelationshipDialog = true" class="add-relationship-btn">
                   <i class="fas fa-plus"></i> 添加关系
                 </button>
                 
@@ -187,7 +187,7 @@
           <div class="add-relationship-content">
             <div class="modal-header">
               <h3>添加关系</h3>
-              <button @click="showAddRelationship = false" class="close-btn">
+              <button @click="openAddRelationshipDialog = false" class="close-btn">
                 <i class="fas fa-times"></i>
               </button>
             </div>
@@ -339,13 +339,35 @@
       
 
       filteredEntityTypes() {
+        console.log('Computing filtered entity types. Category:', this.selectedEntityTypeCategory);
+        console.log('Available entity types:', this.entityTypes);
+        
+        if (!this.entityTypes || !Array.isArray(this.entityTypes)) {
+          console.error('Entity types is not an array:', this.entityTypes);
+          return [];
+        }
+        
         if (!this.selectedEntityTypeCategory) return this.entityTypes;
-        return this.entityTypes.filter(type => type.category === this.selectedEntityTypeCategory);
+        
+        const filtered = this.entityTypes.filter(type => type.category === this.selectedEntityTypeCategory);
+        console.log('Filtered entity types:', filtered);
+        return filtered;
       },
       
       filteredRelationshipTypes() {
+        console.log('Computing filtered relationship types. Category:', this.selectedRelationshipTypeCategory);
+        console.log('Available relationship types:', this.relationshipTypes);
+        
+        if (!this.relationshipTypes || !Array.isArray(this.relationshipTypes)) {
+          console.error('Relationship types is not an array:', this.relationshipTypes);
+          return [];
+        }
+        
         if (!this.selectedRelationshipTypeCategory) return this.relationshipTypes;
-        return this.relationshipTypes.filter(type => type.category === this.selectedRelationshipTypeCategory);
+        
+        const filtered = this.relationshipTypes.filter(type => type.category === this.selectedRelationshipTypeCategory);
+        console.log('Filtered relationship types:', filtered);
+        return filtered;
       },
       
       isNewRelationshipValid() {
@@ -465,16 +487,46 @@
         return value;
       },
       
+      openAddRelationshipDialog () {
+        // 重置关系类型选择
+        this.selectedRelationshipTypeCategory = '';
+        this.newRelationship = {
+          direction: 'outgoing',
+          type: '',
+          targetEntity: null
+        };
+        
+        // 显示添加关系对话框
+        this.showAddRelationship = true;
+      },
       editEntity() {
         console.log('Edit entity:', this.selectedEntity);
         this.isEditing = true;
-        this.editingEntity = JSON.parse(JSON.stringify(this.selectedEntity)); // Create a deep copy
+        this.editingEntity = JSON.parse(JSON.stringify(this.selectedEntity)); // 创建深拷贝
+        
+        // 重置分类选择器
+        this.selectedEntityTypeCategory = '';
+        
+        // 对应类型找到对应的分类
+        if (this.selectedEntity.type && this.entityTypes && this.entityTypes.length > 0) {
+          const entityType = this.entityTypes.find(t => t.type_code === this.selectedEntity.type);
+          if (entityType) {
+            console.log('Found entity type:', entityType);
+            this.selectedEntityTypeCategory = entityType.category;
+          } else {
+            console.warn('Entity type not found in available types:', this.selectedEntity.type);
+          }
+        }
+        
         this.editFormData = {
           name: this.selectedEntity.name,
           type: this.selectedEntity.type,
           description: this.selectedEntity.description || '',
           properties: {...this.selectedEntity.properties}
         };
+        
+        console.log('Edit form data initialized:', this.editFormData);
+        console.log('Selected entity type category:', this.selectedEntityTypeCategory);
       },
             
       traceKnowledge() {
@@ -558,37 +610,67 @@
 
       async fetchEntityTypes() {
         try {
+          console.log('Fetching entity types...');
           const response = await fetch('/api/v1/entity-types');
-          if (response.ok) {
-            const data = await response.json();
-            this.entityTypes = data;
-            
-            // Extract unique categories
-            this.entityTypeCategories = [...new Set(data.map(type => type.category))];
-            console.log('Loaded entity types:', data);
-          } else {
-            console.error('Failed to load entity types:', response.statusText);
+          
+          if (!response.ok) {
+            throw new Error(`获取实体类型失败: ${response.status} ${response.statusText}`);
           }
+          
+          // 记录原始响应内容以进行调试
+          const responseText = await response.text();
+          console.log('Entity types raw response:', responseText);
+          
+          // 解析JSON
+          const data = JSON.parse(responseText);
+          console.log('Entity types parsed data:', data);
+          
+          // 验证数据格式
+          if (!Array.isArray(data)) {
+            throw new Error('实体类型返回格式不正确，期望数组但收到: ' + typeof data);
+          }
+          
+          // 更新数据
+          this.entityTypes = data;
+          this.entityTypeCategories = [...new Set(data.map(type => type.category))];
+          console.log('Entity type categories:', this.entityTypeCategories);
         } catch (error) {
           console.error('Error fetching entity types:', error);
+          // 在UI显示错误
+          alert('加载实体类型失败: ' + error.message);
         }
       },
 
       async fetchRelationshipTypes() {
         try {
+          console.log('Fetching relationship types...');
           const response = await fetch('/api/v1/relationship-types');
-          if (response.ok) {
-            const data = await response.json();
-            this.relationshipTypes = data;
-            
-            // Extract unique categories
-            this.relationshipTypeCategories = [...new Set(data.map(type => type.category))];
-            console.log('Loaded relationship types:', data);
-          } else {
-            console.error('Failed to load relationship types:', response.statusText);
+          
+          if (!response.ok) {
+            throw new Error(`获取关系类型失败: ${response.status} ${response.statusText}`);
           }
+          
+          // 记录原始响应内容以进行调试
+          const responseText = await response.text();
+          console.log('Relationship types raw response:', responseText);
+          
+          // 解析JSON
+          const data = JSON.parse(responseText);
+          console.log('Relationship types parsed data:', data);
+          
+          // 验证数据格式
+          if (!Array.isArray(data)) {
+            throw new Error('关系类型返回格式不正确，期望数组但收到: ' + typeof data);
+          }
+          
+          // 更新数据
+          this.relationshipTypes = data;
+          this.relationshipTypeCategories = [...new Set(data.map(type => type.category))];
+          console.log('Relationship type categories:', this.relationshipTypeCategories);
         } catch (error) {
           console.error('Error fetching relationship types:', error);
+          // 在UI显示错误
+          alert('加载关系类型失败: ' + error.message);
         }
       },
       initVisualization() {
