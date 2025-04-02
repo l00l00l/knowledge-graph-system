@@ -339,8 +339,26 @@
       
 
       filteredEntityTypes() {
-        if (!this.selectedEntityTypeCategory) return this.entityTypes;
-        return this.entityTypes.filter(type => type.category === this.selectedEntityTypeCategory);
+        console.log('Computing filteredEntityTypes');
+        console.log('Current entity types:', this.entityTypes);
+        console.log('Selected category:', this.selectedEntityTypeCategory);
+        
+        if (!this.entityTypes || this.entityTypes.length === 0) {
+          console.log('No entity types available');
+          return [];
+        }
+        
+        if (!this.selectedEntityTypeCategory) {
+          console.log('No category selected, returning all types');
+          return this.entityTypes;
+        }
+        
+        const filtered = this.entityTypes.filter(type => 
+          type.category === this.selectedEntityTypeCategory
+        );
+        
+        console.log('Filtered entity types:', filtered);
+        return filtered;
       },
       
       filteredRelationshipTypes() {
@@ -466,15 +484,29 @@
       },
       
       editEntity() {
-        console.log('Edit entity:', this.selectedEntity);
+        console.log('Editing entity:', this.selectedEntity);
         this.isEditing = true;
         this.editingEntity = JSON.parse(JSON.stringify(this.selectedEntity)); // Create a deep copy
+        
+        // Find entity type category for the selected entity
+        if (this.selectedEntity.type && this.entityTypes.length > 0) {
+          const entityType = this.entityTypes.find(t => t.type_code === this.selectedEntity.type);
+          if (entityType) {
+            this.selectedEntityTypeCategory = entityType.category;
+          } else {
+            this.selectedEntityTypeCategory = '';
+          }
+        }
+        
         this.editFormData = {
           name: this.selectedEntity.name,
           type: this.selectedEntity.type,
           description: this.selectedEntity.description || '',
-          properties: {...this.selectedEntity.properties}
+          properties: {...this.selectedEntity.properties} || {}
         };
+        
+        console.log('Edit form initialized:', this.editFormData);
+        console.log('Selected entity type category:', this.selectedEntityTypeCategory);
       },
             
       traceKnowledge() {
@@ -558,14 +590,22 @@
 
       async fetchEntityTypes() {
         try {
-          const response = await fetch('/api/v1/entity-types');
+          console.log('Fetching entity types...');
+          const response = await fetch('/api/v1/entity-types', {
+            headers: {
+              'Accept': 'application/json'
+            },
+            redirect: 'follow'
+          });
+          
           if (response.ok) {
             const data = await response.json();
             this.entityTypes = data;
+            console.log('Entity types loaded:', this.entityTypes);
             
             // Extract unique categories
             this.entityTypeCategories = [...new Set(data.map(type => type.category))];
-            console.log('Loaded entity types:', data);
+            console.log('Entity type categories:', this.entityTypeCategories);
           } else {
             console.error('Failed to load entity types:', response.statusText);
           }
@@ -576,14 +616,22 @@
 
       async fetchRelationshipTypes() {
         try {
-          const response = await fetch('/api/v1/relationship-types');
+          console.log('Fetching relationship types...');
+          const response = await fetch('/api/v1/relationship-types', {
+            headers: {
+              'Accept': 'application/json'
+            },
+            redirect: 'follow'
+          });
+          
           if (response.ok) {
             const data = await response.json();
             this.relationshipTypes = data;
+            console.log('Relationship types loaded:', this.relationshipTypes);
             
             // Extract unique categories
             this.relationshipTypeCategories = [...new Set(data.map(type => type.category))];
-            console.log('Loaded relationship types:', data);
+            console.log('Relationship type categories:', this.relationshipTypeCategories);
           } else {
             console.error('Failed to load relationship types:', response.statusText);
           }
@@ -947,10 +995,21 @@
       }
     },
     mounted() {
-      console.log('Graph component mounted, fetching graph data...');
-      this.fetchEntityTypes();
-      this.fetchGraphData();
-      this.fetchRelationshipTypes();
+      console.log('Graph component mounted');
+      
+      // First load entity and relationship types
+      Promise.all([
+        this.fetchEntityTypes(),
+        this.fetchRelationshipTypes()
+      ]).then(() => {
+        console.log('Types loaded, now fetching graph data');
+        this.fetchGraphData();
+      }).catch(err => {
+        console.error('Error loading types:', err);
+        // Still try to load graph data even if types fail
+        this.fetchGraphData();
+      });
+      
       window.addEventListener('resize', this.handleResize);
     },
     beforeUnmount() {
