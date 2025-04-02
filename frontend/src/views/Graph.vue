@@ -383,36 +383,67 @@
       
 
       filteredEntityTypes() {
-        // 添加调试信息
-        console.log('Computing filtered entity types');
-        console.log('Selected category:', this.selectedEntityTypeCategory);
-        console.log('All entity types:', this.entityTypes);
+        // 添加更多详细的调试日志
+        console.log('Computing filteredEntityTypes');
+        console.log('  Selected category:', this.selectedEntityTypeCategory);
+        console.log('  All entity types:', this.entityTypes);
         
         // 如果没有选择分类，返回所有类型
-        if (!this.selectedEntityTypeCategory) return this.entityTypes;
+        if (!this.selectedEntityTypeCategory) {
+          console.log('  No category selected, returning all types');
+          return this.entityTypes;
+        }
         
-        // 严格匹配分类
-        const filtered = this.entityTypes.filter(type => type.category === this.selectedEntityTypeCategory);
+        // 精确匹配分类
+        const filtered = this.entityTypes.filter(type => {
+          const matches = type.category === this.selectedEntityTypeCategory;
+          if (matches) {
+            console.log(`  Type ${type.type_name} matches category ${this.selectedEntityTypeCategory}`);
+          }
+          return matches;
+        });
         
-        // 查看过滤结果
-        console.log('Filtered entity types:', filtered);
+        console.log(`  Filtered ${filtered.length} entity types for category ${this.selectedEntityTypeCategory}`);
+        
+        // 如果过滤结果为空，可能是因为分类不匹配，日志警告
+        if (filtered.length === 0) {
+          console.warn('  Warning: No entity types match the selected category!');
+          console.log('  Available categories in data:', [...new Set(this.entityTypes.map(t => t.category))]);
+        }
+        
         return filtered;
       },
+
       
       filteredRelationshipTypes() {
-        // 添加调试信息
-        console.log('Computing filtered relationship types');
-        console.log('Selected category:', this.selectedRelationshipTypeCategory);
-        console.log('All relationship types:', this.relationshipTypes);
+        // 添加更多详细的调试日志
+        console.log('Computing filteredRelationshipTypes');
+        console.log('  Selected category:', this.selectedRelationshipTypeCategory);
+        console.log('  All relationship types:', this.relationshipTypes);
         
         // 如果没有选择分类，返回所有类型
-        if (!this.selectedRelationshipTypeCategory) return this.relationshipTypes;
+        if (!this.selectedRelationshipTypeCategory) {
+          console.log('  No category selected, returning all types');
+          return this.relationshipTypes;
+        }
         
-        // 严格匹配分类
-        const filtered = this.relationshipTypes.filter(type => type.category === this.selectedRelationshipTypeCategory);
+        // 精确匹配分类
+        const filtered = this.relationshipTypes.filter(type => {
+          const matches = type.category === this.selectedRelationshipTypeCategory;
+          if (matches) {
+            console.log(`  Type ${type.type_name} matches category ${this.selectedRelationshipTypeCategory}`);
+          }
+          return matches;
+        });
         
-        // 查看过滤结果
-        console.log('Filtered relationship types:', filtered);
+        console.log(`  Filtered ${filtered.length} relationship types for category ${this.selectedRelationshipTypeCategory}`);
+        
+        // 如果过滤结果为空，可能是因为分类不匹配，日志警告
+        if (filtered.length === 0) {
+          console.warn('  Warning: No relationship types match the selected category!');
+          console.log('  Available categories in data:', [...new Set(this.relationshipTypes.map(t => t.category))]);
+        }
+        
         return filtered;
       },
       
@@ -542,17 +573,6 @@
         // 重置分类选择器
         this.selectedEntityTypeCategory = '';
         
-        // 根据当前实体类型查找对应的分类
-        if (this.selectedEntity.type && this.entityTypes.length > 0) {
-          const entityType = this.entityTypes.find(t => t.type_code === this.selectedEntity.type);
-          if (entityType) {
-            console.log('Found entity type:', entityType);
-            this.selectedEntityTypeCategory = entityType.category;
-          } else {
-            console.warn('Entity type not found:', this.selectedEntity.type);
-          }
-        }
-        
         this.editFormData = {
           name: this.selectedEntity.name,
           type: this.selectedEntity.type,
@@ -560,8 +580,25 @@
           properties: {...this.selectedEntity.properties}
         };
         
+        // 根据当前实体类型查找对应的分类并设置
+        if (this.selectedEntity.type && this.entityTypes.length > 0) {
+          console.log('Looking for entity type:', this.selectedEntity.type);
+          const entityType = this.entityTypes.find(t => t.type_code === this.selectedEntity.type);
+          if (entityType) {
+            console.log('Found entity type:', entityType);
+            
+            // 确保在下一个事件循环中更新分类选择器，以便Vue响应式系统可以正确更新
+            setTimeout(() => {
+              this.selectedEntityTypeCategory = entityType.category;
+              console.log('Updated selected entity category to:', this.selectedEntityTypeCategory);
+              this.$forceUpdate(); // 强制更新视图
+            }, 0);
+          } else {
+            console.warn('Entity type not found in available types:', this.selectedEntity.type);
+          }
+        }
+        
         console.log('Edit form data initialized:', this.editFormData);
-        console.log('Selected entity type category:', this.selectedEntityTypeCategory);
       },
             
       traceKnowledge() {
@@ -579,6 +616,18 @@
         this.initVisualization();
       },
 
+      handleEntityCategoryChange() {
+        console.log('Entity category changed to:', this.selectedEntityTypeCategory);
+        // 强制更新计算属性
+        this.$forceUpdate();
+      },
+      
+      // 添加新方法：处理关系类型分类变化
+      handleRelationshipCategoryChange() {
+        console.log('Relationship category changed to:', this.selectedRelationshipTypeCategory);
+        // 强制更新计算属性
+        this.$forceUpdate();
+      },
       async fetchGraphData() {
         try {
           console.log('Fetching graph data...');
@@ -878,19 +927,22 @@
         this.targetEntitySearch = '';
       },
       resetRelationshipForm() {
-        // 重置关系类型选择
-        this.selectedRelationshipTypeCategory = '';
+        // 重置关系表单数据
         this.newRelationship = {
           direction: 'outgoing',
           type: '',
           targetEntity: null
         };
         
-        // 默认选择"基础类型"分类以改善用户体验
-        this.selectedRelationshipTypeCategory = '基础类型';
+        // 先清空选择器，然后设置默认分类
+        this.selectedRelationshipTypeCategory = '';
         
-        console.log('Relationship form reset');
-        console.log('Selected relationship type category:', this.selectedRelationshipTypeCategory);
+        // 确保在下一个事件循环中更新分类选择器
+        setTimeout(() => {
+          this.selectedRelationshipTypeCategory = '基础类型';
+          console.log('Reset relationship category to:', this.selectedRelationshipTypeCategory);
+          this.$forceUpdate(); // 强制更新视图
+        }, 0);
       },
       showAddRelationshipDialog() {
         console.log('Opening relationship dialog');
