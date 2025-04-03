@@ -186,8 +186,15 @@
             </div>
             
             <div class="edit-modal-footer">
-              <button @click="cancelEdit" class="btn cancel-btn">取消</button>
-              <button @click="saveEntityChanges" class="btn save-btn">保存</button>
+              <div class="left-actions">
+                <button @click="confirmDeleteEntity" class="delete-btn">
+                  <i class="fas fa-trash"></i> 删除实体
+                </button>
+              </div>
+              <div class="right-actions">
+                <button @click="cancelEdit" class="btn cancel-btn">取消</button>
+                <button @click="saveEntityChanges" class="btn save-btn">保存</button>
+              </div>
             </div>
           </div>
         </div>
@@ -252,7 +259,9 @@
                     placeholder="搜索实体..." 
                     class="form-input search-input"
                   >
-                  
+                  <span v-if="isSearching" class="search-loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                  </span>
                   <div v-if="searchResults.length > 0" class="search-results">
                     <div 
                       v-for="entity in searchResults" 
@@ -263,6 +272,9 @@
                       <span>{{ entity.name }}</span>
                       <small>({{ getEntityTypeName(entity.type) }})</small>
                     </div>
+                  </div>
+                  <div v-if="searchResults.length === 0 && targetEntitySearch.length >= 2 && !isSearching" class="no-results">
+                    未找到匹配的实体
                   </div>
                 </div>
                 
@@ -295,6 +307,24 @@
       </button>
     </div>
   </div>
+  <!-- 删除确认对话框 -->
+  <div v-if="showDeleteConfirm" class="confirm-dialog">
+    <div class="confirm-content">
+      <div class="confirm-header">
+        <h3>确认删除</h3>
+      </div>
+      <div class="confirm-body">
+        <p>您确定要删除实体 "{{ editingEntity?.name }}" 吗？此操作无法撤销，且将删除与此实体相关的所有关系。</p>
+      </div>
+      <div class="confirm-footer">
+        <button @click="cancelDelete" class="cancel-btn">取消</button>
+        <button @click="deleteEntity" class="delete-btn" :disabled="isDeleting">
+          <i :class="isDeleting ? 'fas fa-spinner fa-spin' : 'fas fa-trash'"></i>
+          {{ isDeleting ? '删除中...' : '删除' }}
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
   
   <script>
@@ -320,6 +350,9 @@
         showAddRelationship: false,
         selectedEntityTypeCategory: '',
         selectedRelationshipTypeCategory: '',
+        showDeleteConfirm: false,
+        isDeleting: false,
+        isSearching: false,
         newRelationship: {
           direction: 'outgoing',
           type: '',
@@ -869,41 +902,104 @@
         return type ? type.type_name : typeCode;
       },
       
+      // 显示删除确认对话框
+      confirmDeleteEntity() {
+        this.showDeleteConfirm = true;
+      },
+
+      // 取消删除
+      cancelDelete() {
+        this.showDeleteConfirm = false;
+      },
+
+      // 执行删除操作
+      async deleteEntity() {
+        if (!this.editingEntity || !this.editingEntity.id) {
+          alert('缺少实体ID，无法删除');
+          return;
+        }
+        
+        this.isDeleting = true;
+        
+        try {
+          // 调用API删除实体
+          const response = await fetch(`/api/v1/entities/${this.editingEntity.id}`, {
+            method: 'DELETE'
+          });
+          
+          if (!response.ok) {
+            throw new Error(`删除失败: ${response.status}`);
+          }
+          
+          // 从节点数组中移除该实体
+          const index = this.nodes.findIndex(node => node.id === this.editingEntity.id);
+          if (index !== -1) {
+            this.nodes.splice(index, 1);
+          }
+          
+          // 清除选择的实体
+          this.selectedEntity = null;
+          
+          // 关闭编辑模态框和确认对话框
+          this.isEditing = false;
+          this.showDeleteConfirm = false;
+          
+          // 刷新图表
+          this.initVisualization();
+          
+          alert('实体已成功删除');
+        } catch (error) {
+          console.error('Error deleting entity:', error);
+          alert('删除失败: ' + error.message);
+        } finally {
+          this.isDeleting = false;
+        }
+      },
       async searchTargetEntities() {
         if (!this.targetEntitySearch || this.targetEntitySearch.length < 2) {
           this.searchResults = [];
           return;
         }
         
+        this.isSearching = true;
+        
         try {
-          // First try to search entities from current loaded nodes (faster)
+          // 首先本地搜索现有节点（更快）
           const query = this.targetEntitySearch.toLowerCase();
           const localResults = this.nodes
             .filter(node => 
               node.id !== this.editingEntity.id && 
               node.name.toLowerCase().includes(query)
             )
-            .slice(0, 10); // Limit to 10 results
+            .slice(0, 10); // 限制为10个结果
           
           if (localResults.length > 0) {
             this.searchResults = localResults;
+            this.isSearching = false;
             return;
           }
           
-          // If no local results, try to search from Neo4j
+          // 如果本地没有结果，尝试从后端API搜索
+          console.log(`Searching for entities matching: ${this.targetEntitySearch}`);
           const response = await fetch(`/api/v1/entities/search?query=${encodeURIComponent(this.targetEntitySearch)}&limit=10`);
           
-          if (response.ok) {
-            const data = await response.json();
-            this.searchResults = data;
-          } else {
-            console.error('Error searching entities:', response.statusText);
-            // Fall back to local search only
-            this.searchResults = localResults;
+          if (!response.ok) {
+            console.error(`API error: ${response.status}`);
+            throw new Error(`搜索失败: ${response.status}`);
           }
+          
+          const data = await response.json();
+          console.log(`Found ${data.length} results from API`);
+          
+          // 确保结果格式正确
+          this.searchResults = data.map(item => ({
+            id: item.id,
+            name: item.name,
+            type: item.type
+          }));
         } catch (error) {
           console.error('Error searching entities:', error);
-          // In case of error, try local search
+          // 在出错时，回退到本地搜索
           const query = this.targetEntitySearch.toLowerCase();
           this.searchResults = this.nodes
             .filter(node => 
@@ -911,10 +1007,13 @@
               node.name.toLowerCase().includes(query)
             )
             .slice(0, 10);
+        } finally {
+          this.isSearching = false;
         }
       },
       
       selectTargetEntity(entity) {
+        console.log('Selected target entity:', entity);
         this.newRelationship.targetEntity = entity;
         this.targetEntitySearch = '';
         this.searchResults = [];
@@ -1612,12 +1711,82 @@
     padding: 16px 24px;
     border-top: 1px solid #eee;
     display: flex;
-    justify-content: flex-end;
-    gap: 12px;
+    justify-content: space-between;
     background-color: #f8f9fa;
     border-radius: 0 0 8px 8px;
+    }
+
+  .right-actions {
+    display: flex;
+    gap: 12px;
+  }
+  .delete-btn {
+    padding: 8px 16px;
+    background-color: #f44336;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background-color 0.2s;
   }
 
+  .delete-btn:hover {
+    background-color: #d32f2f;
+  }
+
+  .delete-btn:disabled {
+    background-color: #ef9a9a;
+    cursor: not-allowed;
+  }
+
+  /* 确认对话框样式 */
+  .confirm-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1200;
+  }
+
+  .confirm-content {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    width: 450px;
+    max-width: 95%;
+  }
+
+  .confirm-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .confirm-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #333;
+  }
+
+  .confirm-body {
+    padding: 24px;
+  }
+
+  .confirm-footer {
+    padding: 16px 24px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+  }
   .form-group {
     margin-bottom: 18px;
   }
@@ -2023,13 +2192,20 @@
   }
   .entity-search-wrapper {
     position: relative;
+    margin-bottom: 10px;
   }
 
   .search-input {
     width: 100%;
     padding-right: 30px;
   }
-
+  .search-loading {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #999;
+  }
   .search-results {
     position: absolute;
     top: 100%;
@@ -2047,7 +2223,7 @@
   .search-result-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
     padding: 8px 12px;
     cursor: pointer;
     border-bottom: 1px solid #eee;
@@ -2061,7 +2237,15 @@
   .search-result-item:hover {
     background-color: #f5f5f5;
   }
-
+  .no-results {
+    padding: 10px;
+    text-align: center;
+    color: #999;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 0 0 4px 4px;
+    margin-top: -1px;
+  }
   .search-result-item i {
     font-size: 14px;
     width: 20px;
