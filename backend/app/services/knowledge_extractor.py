@@ -289,18 +289,49 @@ class SpacyNERExtractor:
         import hashlib
         return hashlib.md5(text.encode("utf-8")).hexdigest()
     
+    # 文件: backend/app/services/knowledge_extractor.py
     def _guess_relation_type(self, source_type: str, target_type: str) -> str:
         """根据实体类型猜测关系类型"""
-        # 简单的关系类型推断
-        if source_type == "person" and target_type == "organization":
-            return "works_for"
-        elif source_type == "organization" and target_type == "person":
-            return "employs"
-        elif source_type == "person" and target_type == "location":
-            return "located_in"
-        elif source_type == "concept" and target_type == "concept":
+        # 扩展关系类型映射
+        type_map = {
+            # 人物相关
+            ("person", "person"): "knows",
+            ("person", "organization"): "works_for",
+            ("organization", "person"): "employs",
+            ("person", "location"): "located_in",
+            ("person", "event"): "participated_in",
+            ("person", "concept"): "studied",
+            ("person", "time"): "lived_during",
+            
+            # 组织相关
+            ("organization", "organization"): "related_to",
+            ("organization", "location"): "located_in",
+            ("organization", "concept"): "focuses_on",
+            ("organization", "time"): "existed_during",
+            
+            # 概念相关
+            ("concept", "concept"): "related_to",
+            ("concept", "time"): "developed_in",
+            ("concept", "event"): "associated_with",
+            
+            # 一般关系
+            ("event", "time"): "occurred_in",
+            ("event", "location"): "occurred_at",
+            ("location", "location"): "near",
+        }
+        
+        # 查找匹配的关系类型
+        relation_key = (source_type, target_type)
+        if relation_key in type_map:
+            return type_map[relation_key]
+        
+        # 基于实体类型的通用规则
+        if source_type == target_type:
             return "related_to"
-        elif source_type == target_type:
-            return "related_to"
-        else:
-            return "has_relation"
+        if source_type == "concept" and target_type != "concept":
+            return "describes"
+        if target_type == "concept" and source_type != "concept":
+            return "described_by"
+        
+        # 默认关系类型
+        return "has_relation"

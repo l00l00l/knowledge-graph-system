@@ -51,10 +51,11 @@ class Neo4jDatabase(DatabaseInterface[T]):
             elif isinstance(v, UUID):
                 props[k] = str(v)
         
-        # 构建Cypher查询 - 修复实体创建查询
+        # 修正Cypher查询 - 使用正确的参数语法
         query = """
-        CREATE (e:Entity {props}) 
-        SET e:%s 
+        CREATE (e:Entity)
+        SET e = $props
+        SET e:%s
         RETURN e
         """ % entity.type
         
@@ -71,6 +72,7 @@ class Neo4jDatabase(DatabaseInterface[T]):
             print(f"Error in _create_entity: {e}")
             raise e
     
+    # 文件: backend/app/db/neo4j_db.py
     async def _create_relationship(self, relationship: Relationship) -> Relationship:
         """创建关系边"""
         # 将Pydantic模型转为字典
@@ -86,11 +88,14 @@ class Neo4jDatabase(DatabaseInterface[T]):
             elif isinstance(v, UUID):
                 props[k] = str(v)
         
-        # 构建Cypher查询 - 修复关系创建查询
+        # 修正Cypher查询 - 使用正确的参数语法
         query = """
-        MATCH (source:Entity {id: $source_id})
-        MATCH (target:Entity {id: $target_id})
-        CREATE (source)-[r:%s $props]->(target)
+        MATCH (source)
+        WHERE toString(source.id) = $source_id
+        MATCH (target)
+        WHERE toString(target.id) = $target_id
+        CREATE (source)-[r:%s]->(target)
+        SET r = $props
         RETURN r
         """ % relationship.type
         
