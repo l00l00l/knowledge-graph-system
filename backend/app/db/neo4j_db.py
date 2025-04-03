@@ -114,22 +114,147 @@ class Neo4jDatabase(DatabaseInterface[T]):
             raise e
     async def read(self, id: UUID) -> Optional[T]:
         """读取实体或关系"""
-        # 这里需要实现具体的读取逻辑
-        pass
+        try:
+            # Convert the ID to string
+            entity_id = str(id)
+            print(f"Reading entity with ID: {entity_id}")
+            
+            # More flexible query that matches by string representation of ID
+            query = """
+            MATCH (e)
+            WHERE toString(e.id) = $id
+            RETURN e, labels(e) as labels
+            """
+            
+            async with self.driver.session(database=self.database) as session:
+                result = await session.run(query, id=entity_id)
+                record = await result.single()
+                
+                if not record:
+                    print(f"Entity not found with ID: {entity_id}")
+                    return None
+                    
+                # Extract entity data
+                entity_data = dict(record["e"])
+                entity_labels = record["labels"]
+                
+                # Convert JSON strings back to Python objects
+                for key, value in entity_data.items():
+                    if isinstance(value, str) and (key == "properties" or key == "source_location"):
+                        try:
+                            entity_data[key] = json.loads(value)
+                        except:
+                            pass
+                
+                # Determine entity type from labels
+                entity_type = next((label for label in entity_labels if label != "Entity"), "Entity")
+                entity_data["type"] = entity_type
+                
+                print(f"Found entity: {entity_data.get('name', 'Unnamed')} (Type: {entity_type})")
+                
+                # Return Entity object
+                return Entity(**entity_data)
+                
+        except Exception as e:
+            print(f"Error in read method: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
     async def update(self, id: UUID, obj: T) -> Optional[T]:
         """更新实体或关系"""
-        if isinstance(obj, Entity):
-            return await self._update_entity(obj)
-        elif isinstance(obj, Relationship):
-            return await self._update_relationship(obj)
-        else:
-            raise TypeError(f"不支持的类型: {type(obj)}")
+        try:
+            # Ensure the ID is a string
+            entity_id = str(id)
+            print(f"Updating entity with ID: {entity_id}")
+            
+            # Get entity properties excluding certain fields
+            entity_dict = obj.dict(exclude={"previous_version"})
+            
+            # Convert complex types to JSON strings
+            for key, value in entity_dict.items():
+                if isinstance(value, (dict, list)):
+                    entity_dict[key] = json.dumps(value)
+                elif isinstance(value, UUID):
+                    entity_dict[key] = str(value)
+            
+            # Special case for numeric IDs
+            try:
+                # Try to interpret ID as integer if it looks like one
+                numeric_id = int(entity_id)
+                if str(numeric_id) == entity_id:
+                    print(f"Treating entity ID as numeric: {numeric_id}")
+                    entity_dict["id"] = numeric_id
+            except (ValueError, TypeError):
+                # Not a numeric ID, keep as string
+                entity_dict["id"] = entity_id
+            
+            # Update node properties
+            query = """
+            MATCH (e)
+            WHERE toString(e.id) = $id
+            SET e = $properties
+            """
+            
+            # Add or update entity type label
+            type_query = """
+            MATCH (e)
+            WHERE toString(e.id) = $id
+            WITH e, labels(e) as currentLabels
+            CALL apoc.create.addLabels(e, [$type])
+            YIELD node
+            RETURN node
+            """
+            
+            async with self.driver.session(database=self.database) as session:
+                # Update properties
+                await session.run(query, id=entity_id, properties=entity_dict)
+                
+                # Update type label
+                if "type" in entity_dict and entity_dict["type"]:
+                    try:
+                        await session.run(type_query, id=entity_id, type=entity_dict["type"])
+                    except Exception as type_error:
+                        print(f"Error updating entity type: {type_error}")
+                
+                # Return the updated entity
+                return obj
+                
+        except Exception as e:
+            print(f"Error in update method: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
     async def delete(self, id: UUID) -> bool:
         """删除实体或关系"""
-        # 这里需要实现具体的删除逻辑
-        pass
+        try:
+            # Convert the ID to string for query
+            entity_id = str(id)
+            print(f"Attempting to delete entity with ID: {entity_id}")
+            
+            # Use a more direct approach with explicit debugging
+            query = """
+            MATCH (e)
+            WHERE e.id = $id
+            WITH e, e.id as deleted_id
+            DETACH DELETE e
+            RETURN deleted_id
+            """
+            
+            async with self.driver.session(database=self.database) as session:
+                result = await session.run(query, id=entity_id)
+                records = await result.data()
+                
+                success = len(records) > 0
+                print(f"Delete operation result: {success}, Records: {records}")
+                
+                return success
+        except Exception as e:
+            print(f"Error in delete method: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     async def list(self, skip: int = 0, limit: int = 100) -> List[T]:
         """列出实体或关系"""
