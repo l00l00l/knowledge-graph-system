@@ -169,57 +169,70 @@ class Neo4jDatabase(DatabaseInterface[T]):
             elif isinstance(v, UUID):
                 props[k] = str(v)
         
-        # 构建Cypher查询 - 修改为更精确的更新
-        query = """
-        MATCH (e:Entity {id: $id})
-        SET e.name = $name,
-            e.description = $description,
-            e.properties = $properties
-        RETURN e
-        """
-        
-        params = {
-            "id": entity_id,
-            "name": entity.name,
-            "description": entity.description,
-            "properties": json.dumps(entity.properties)
-        }
-        
         try:
             async with self.driver.session(database=self.database) as session:
-                result = await session.run(query, **params)
-                record = await result.single()
-                
-                # 如果需要更新标签（即实体类型发生变化）
-                type_query = """
+                # 首先更新属性
+                query = """
                 MATCH (e:Entity {id: $id})
-                CALL apoc.cypher.run("MATCH (e:Entity {id: $_id}) 
-                                    REMOVE e:" + $old_labels + " 
-                                    SET e:" + $new_label, 
-                                    {_id: $id, old_labels: $old_labels, new_label: $new_label})
-                YIELD value
+                SET e.name = $name,
+                    e.description = $description,
+                    e.properties = $properties
                 RETURN e
                 """
                 
-                # 假设我们已经知道所有可能的类型
-                types = ["person", "organization", "location", "concept", "time", "event"]
-                old_labels = ":".join([t for t in types if t != entity.type])
-                
-                type_params = {
+                params = {
                     "id": entity_id,
-                    "old_labels": old_labels,
-                    "new_label": entity.type
+                    "name": entity.name,
+                    "description": entity.description,
+                    "properties": json.dumps(entity.properties)
                 }
                 
-                # 执行类型更新
-                await session.run(type_query, **type_params)
+                result = await session.run(query, **params)
+                record = await result.single()
                 
-                if record:
-                    print(f"Successfully updated entity: {entity.name}")
-                    return entity
-                else:
+                if not record:
                     print(f"Entity not found: {entity_id}")
                     return None
+                    
+                # 然后更新实体类型（标签）
+                # 先获取当前的标签，除了"Entity"以外的
+                labels_query = """
+                MATCH (e:Entity {id: $id})
+                RETURN labels(e) AS labels
+                """
+                
+                labels_result = await session.run(labels_query, id=entity_id)
+                labels_record = await labels_result.single()
+                current_labels = labels_record["labels"]
+                
+                # 移除所有当前非Entity标签
+                remove_labels_query = """
+                MATCH (e:Entity {id: $id})
+                """
+                
+                # 从当前标签中排除"Entity"和新类型
+                labels_to_remove = [label for label in current_labels if label != "Entity" and label != entity.type]
+                
+                if labels_to_remove:
+                    for label in labels_to_remove:
+                        remove_label_query = f"""
+                        MATCH (e:Entity {{id: $id}})
+                        REMOVE e:{label}
+                        """
+                        await session.run(remove_label_query, id=entity_id)
+                
+                # 添加新标签
+                add_label_query = f"""
+                MATCH (e:Entity {{id: $id}})
+                SET e:{entity.type}
+                RETURN e
+                """
+                
+                await session.run(add_label_query, id=entity_id)
+                
+                print(f"Successfully updated entity type to: {entity.type}")
+                return entity
+                
         except Exception as e:
             print(f"Error in _update_entity: {e}")
             raise e
