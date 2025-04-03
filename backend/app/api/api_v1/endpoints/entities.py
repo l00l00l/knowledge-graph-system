@@ -13,26 +13,43 @@ router = APIRouter()
 
 @router.get("/search", response_model=List[Dict[str, Any]])
 async def search_entities(
-    query: str = Query(..., min_length=2),
+    query: str = Query(..., min_length=1),  # 修改为允许长度为1的查询
     limit: int = Query(10, ge=1, le=50),
     db: Neo4jDatabase = Depends(get_db)
 ):
     """根据名称搜索实体"""
-    cypher_query = """
-    MATCH (n:Entity)
-    WHERE n.name CONTAINS $query
-    RETURN n.id as id, n.name as name, n.type as type
-    LIMIT $limit
-    """
-    
     try:
-        # Execute the query
+        # 修改Cypher查询以提高兼容性和性能
+        cypher_query = """
+        MATCH (n:Entity)
+        WHERE toLower(n.name) CONTAINS toLower($query)
+        RETURN n.id as id, n.name as name, 
+               CASE WHEN n.type IS NOT NULL THEN n.type ELSE (CASE 
+                   WHEN size([l IN labels(n) WHERE l <> 'Entity']) > 0 
+                   THEN [l IN labels(n) WHERE l <> 'Entity'][0] 
+                   ELSE 'Entity' END) 
+               END as type
+        LIMIT $limit
+        """
+        
+        # 执行查询
         async with db.driver.session(database=db.database) as session:
             result = await session.run(cypher_query, query=query, limit=limit)
             data = await result.data()
             
+            # 确保所有结果的id字段是字符串而不是对象
+            for item in data:
+                if isinstance(item.get('id'), dict) and 'low' in item['id'] and 'high' in item['id']:
+                    item['id'] = str(UUID(int=(item['id']['high'] << 32) | item['id']['low']))
+                elif item.get('id') is not None:
+                    item['id'] = str(item['id'])
+            
+            print(f"Search results for '{query}': {len(data)} entities found")
             return data
     except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Error searching entities: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error searching entities: {str(e)}")
 
 @router.get("/", response_model=List[Entity])
