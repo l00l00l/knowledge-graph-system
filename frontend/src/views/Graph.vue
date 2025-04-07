@@ -248,8 +248,8 @@
                   </div>
                 </div>
               </div>
-              <!-- In the add relationship modal content -->
-              <div class="form-group">
+              <!-- Replace the entity search section in your relationship dialog -->
+              <div class="form-group entity-search-container">
                 <label>目标实体</label>
                 <div class="entity-search-wrapper">
                   <input 
@@ -260,33 +260,42 @@
                     placeholder="搜索实体..." 
                     class="form-input search-input"
                   >
-                  <span v-if="isSearching" class="search-loading">
+                  <button type="button" v-if="isSearching" class="search-status searching">
                     <i class="fas fa-spinner fa-spin"></i>
-                  </span>
+                  </button>
+                  <button type="button" v-else-if="targetEntitySearch" class="search-status" @click="searchTargetEntities">
+                    <i class="fas fa-search"></i>
+                  </button>
                 </div>
                 
-                <!-- Search results dropdown -->
-                <div v-if="searchResults.length > 0" class="search-results">
+                <!-- Improved search results dropdown -->
+                <div v-if="searchResults.length > 0" class="search-results-dropdown">
                   <div 
                     v-for="entity in searchResults" 
                     :key="entity.id" 
-                    class="search-result-item"
+                    class="result-item"
                     @click="selectTargetEntity(entity)"
                   >
-                    <span>{{ entity.name }}</span>
-                    <small>({{ getEntityTypeName(entity.type) }})</small>
+                    <div class="result-name">{{ entity.name }}</div>
+                    <div class="result-type">{{ getEntityTypeName(entity.type) }}</div>
                   </div>
                 </div>
                 
-                <!-- No results message -->
-                <div v-if="searchResults.length === 0 && targetEntitySearch.length >= 1 && !isSearching" class="no-results">
-                  未找到匹配的实体
+                <!-- No results message (improved styling) -->
+                <div v-if="searchResults.length === 0 && targetEntitySearch.length >= 1 && !isSearching" class="no-results-message">
+                  <i class="fas fa-info-circle"></i> 未找到匹配的实体
                 </div>
                 
-                <!-- Selected entity display -->
-                <div v-if="newRelationship.targetEntity" class="selected-target-entity">
-                  <span>{{ newRelationship.targetEntity.name }}</span>
-                  <button @click="newRelationship.targetEntity = null" class="clear-entity-btn">
+                <!-- Improved selected entity display -->
+                <div v-if="newRelationship.targetEntity" class="selected-entity">
+                  <div class="entity-badge" :class="newRelationship.targetEntity.type">
+                    <i :class="getEntityTypeIcon(newRelationship.targetEntity.type)"></i>
+                  </div>
+                  <div class="entity-details">
+                    <div class="entity-name">{{ newRelationship.targetEntity.name }}</div>
+                    <div class="entity-type">{{ getEntityTypeName(newRelationship.targetEntity.type) }}</div>
+                  </div>
+                  <button @click="newRelationship.targetEntity = null" class="remove-entity-btn">
                     <i class="fas fa-times"></i>
                   </button>
                 </div>
@@ -560,10 +569,6 @@
         // });
       },
       
-      getEntityTypeIcon(typeCode) {
-        const type = this.entityTypes.find(t => t.type_code === typeCode);
-        return type && type.icon ? `fas ${type.icon}` : 'fas fa-circle';
-      },
       async selectEntity(entity) {
         this.selectedEntity = entity;
         
@@ -1037,7 +1042,18 @@
         this.targetEntitySearch = '';
         this.searchResults = [];
       },
-      
+      // Add this method to your component methods
+      getEntityTypeIcon(type) {
+        const iconMap = {
+          'person': 'fas fa-user',
+          'organization': 'fas fa-building',
+          'location': 'fas fa-map-marker-alt',
+          'concept': 'fas fa-lightbulb',
+          'time': 'fas fa-clock',
+          'event': 'fas fa-calendar-alt'
+        };
+        return iconMap[type] || 'fas fa-dot-circle';
+      },
       addRelationship() {
         if (!this.isNewRelationshipValid) return;
         
@@ -1074,14 +1090,12 @@
         this.targetEntitySearch = '';
       },
 
-      // Add this method to handle input changes with debouncing
+      // Update your handleInputChange method if needed
       handleInputChange() {
-        // Clear any existing timer
         if (this.searchTimer) {
           clearTimeout(this.searchTimer);
         }
         
-        // Set a timer to search after typing stops for 500ms
         this.searchTimer = setTimeout(() => {
           // Only search if we have at least one character
           if (this.targetEntitySearch.trim().length >= 1) {
@@ -1089,7 +1103,7 @@
           } else {
             this.searchResults = [];
           }
-        }, 500);
+        }, 300); // Reduced to 300ms for faster response
       },
 
     
@@ -2230,10 +2244,39 @@
     position: relative;
     margin-bottom: 10px;
   }
-
+  .entity-search-container {
+    position: relative;
+    margin-bottom: 20px;
+  }
   .search-input {
     width: 100%;
-    padding-right: 30px;
+    padding: 10px 40px 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .search-input:focus {
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+    outline: none;
+  }
+
+  .search-status {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 50%;
+  }
+  .search-status.searching {
+    cursor: default;
   }
   .search-loading {
     position: absolute;
@@ -2321,5 +2364,122 @@
     cursor: not-allowed;
   }
 
+  .search-results-dropdown {
+    position: absolute;
+    top: calc(100% - 4px); /* Slightly overlap with input */
+    left: 0;
+    right: 0;
+    z-index: 1000; /* High z-index to ensure visibility */
+    max-height: 250px;
+    overflow-y: auto;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    margin-top: -1px; /* Connect with input border */
+  }
+  .result-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+    transition: background-color 0.2s;
+  }
+
+  .result-item:last-child {
+    border-bottom: none;
+  }
+
+  .result-item:hover {
+    background-color: #f5f5f5;
+  }
+
+  .result-name {
+    font-weight: 500;
+  }
+
+  .result-type {
+    color: #777;
+    font-size: 0.85em;
+  }
+
+  /* Improved no results message */
+  .no-results-message {
+    padding: 12px;
+    text-align: center;
+    color: #666;
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    margin-top: 8px;
+    font-size: 14px;
+  }
+
+  .no-results-message i {
+    margin-right: 6px;
+    color: #999;
+  }
+
+  /* Improved selected entity styling */
+  .selected-entity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 12px 16px;
+    background-color: #e3f2fd;
+    border-radius: 6px;
+    border-left: 4px solid #2196f3;
+  }
+
+  .entity-badge {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: #e0e0e0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* Entity type styling */
+  .entity-badge.person { background-color: #ffab91; }
+  .entity-badge.organization { background-color: #90caf9; }
+  .entity-badge.location { background-color: #a5d6a7; }
+  .entity-badge.concept { background-color: #ef9a9a; }
+  .entity-badge.time { background-color: #ce93d8; }
+  .entity-badge.event { background-color: #bcaaa4; }
+
+  .entity-details {
+    flex: 1;
+  }
+
+  .entity-name {
+    font-weight: 500;
+    font-size: 15px;
+  }
+
+  .entity-type {
+    color: #666;
+    font-size: 13px;
+  }
+
+  .remove-entity-btn {
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    transition: all 0.2s;
+  }
+
+  .remove-entity-btn:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #f44336;
+  }
   }
   </style>
