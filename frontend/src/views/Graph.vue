@@ -570,11 +570,35 @@
       },
       
       async selectEntity(entity) {
+        console.log('Selecting entity:', entity);
         this.selectedEntity = entity;
         
-        // In a real app, we would fetch real data
-        // For now, generate some mock relationships
-        this.entityRelationships = this.getMockRelationships(entity.id);
+        try {
+          // In a real app, we would fetch relationships from the backend
+          // For now, we'll use the mock data but add a fetch simulation
+          console.log('Fetching relationships for entity:', entity.id);
+          
+          // Clear existing relationships first
+          this.entityRelationships = [];
+          
+          // Set after a brief delay to simulate API call
+          setTimeout(() => {
+            this.entityRelationships = this.getMockRelationships(entity.id);
+            console.log('Retrieved relationships:', this.entityRelationships);
+          }, 100);
+          
+          // In a production environment, you would use this code instead:
+          /*
+          const response = await fetch(`/api/v1/entities/${entity.id}/relationships`);
+          if (response.ok) {
+            const data = await response.json();
+            this.entityRelationships = data;
+          }
+          */
+        } catch (error) {
+          console.error('Error fetching relationships:', error);
+          this.entityRelationships = [];
+        }
       },
       
 
@@ -1133,7 +1157,7 @@
           this.entityRelationships.splice(index, 1);
         }
       },
-      saveEntityChanges() {
+      async saveEntityChanges() {
         console.log('Saving entity changes');
         
         // Check if we have an entity ID
@@ -1153,49 +1177,95 @@
         
         console.log('Sending update request for entity:', updatedEntity);
         
-        // Call API to update entity
-        fetch(`/api/v1/entities/${this.editingEntity.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(updatedEntity)
-        })
-        .then(response => {
+        try {
+          // First update the entity
+          const response = await fetch(`/api/v1/entities/${this.editingEntity.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updatedEntity)
+          });
+          
           console.log('Update response status:', response.status);
           if (!response.ok) {
-            return response.text().then(text => {
-              throw new Error(`Failed to update entity: ${response.status} - ${text || response.statusText}`);
-            });
+            throw new Error(`Failed to update entity: ${response.status}`);
           }
-          return response.json();
-        })
-        .then(data => {
-          console.log('Update successful, received data:', data);
+          
+          const updatedEntityData = await response.json();
+          console.log('Entity update successful, received data:', updatedEntityData);
+          
+          // Now handle relationships
+          console.log('Updating relationships:', this.entityRelationships);
+          
+          // Process each relationship
+          const relationshipPromises = this.entityRelationships.map(async relationship => {
+            // Skip relationships that don't have an id yet or have already been processed
+            if (!relationship.id || relationship.id.startsWith('temp-')) {
+              // This is a new relationship
+              const relationshipData = {
+                type: relationship.type,
+                source_id: relationship.direction === 'outgoing' ? this.editingEntity.id : relationship.target.id,
+                target_id: relationship.direction === 'outgoing' ? relationship.target.id : this.editingEntity.id,
+                properties: relationship.properties || {},
+                bidirectional: false,
+                certainty: 1.0
+              };
+              
+              console.log('Creating new relationship:', relationshipData);
+              
+              // Send API request to create relationship
+              const relResponse = await fetch('/api/v1/relationships/', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(relationshipData)
+              });
+              
+              if (!relResponse.ok) {
+                console.error('Failed to create relationship:', await relResponse.text());
+                return false;
+              }
+              
+              return true;
+            }
+            
+            return true; // Skip existing relationships for now
+          });
+          
+          // Wait for all relationship updates to complete
+          const results = await Promise.all(relationshipPromises);
+          
+          if (results.some(result => !result)) {
+            console.warn('Some relationships failed to update');
+          }
           
           // Update the entity in the nodes array
-          const index = this.nodes.findIndex(node => node.id === data.id);
+          const index = this.nodes.findIndex(node => node.id === updatedEntityData.id);
           if (index !== -1) {
-            this.nodes[index] = data;
+            this.nodes[index] = updatedEntityData;
           }
           
           // Update selected entity
-          this.selectedEntity = data;
+          this.selectedEntity = updatedEntityData;
           
           // Reset edit mode
           this.isEditing = false;
           this.editingEntity = null;
           
-          // Reinitialize visualization
-          this.fetchGraphData();
+          // Refresh the data to show updated relationships
+          await this.fetchGraphData();
+          
+          // Re-select the entity to see the updated relationships
+          await this.selectEntity(updatedEntityData);
           
           // Show success message
-          alert('实体更新成功');
-        })
-        .catch(error => {
+          alert('实体及关系更新成功');
+        } catch (error) {
           console.error('Error updating entity:', error);
           alert('更新失败: ' + error.message);
-        });
+        }
       },
 
       cancelEdit() {
@@ -2366,26 +2436,29 @@
 
   .search-results-dropdown {
     position: absolute;
-    top: calc(100% - 4px); /* Slightly overlap with input */
+    top: calc(100% - 4px);
     left: 0;
     right: 0;
-    z-index: 1000; /* High z-index to ensure visibility */
-    max-height: 250px;
+    z-index: 1000;
+    max-height: 300px; /* Increased max height */
     overflow-y: auto;
     background-color: white;
     border: 1px solid #ddd;
     border-radius: 0 0 6px 6px;
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-    margin-top: -1px; /* Connect with input border */
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+    margin-top: -1px;
+    width: 100%; /* Ensure full width */
   }
   .result-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 14px;
+    padding: 12px 16px; /* More padding */
     cursor: pointer;
     border-bottom: 1px solid #eee;
     transition: background-color 0.2s;
+    white-space: nowrap; /* Prevent text wrapping */
+    overflow: hidden;
   }
 
   .result-item:last-child {
@@ -2393,16 +2466,28 @@
   }
 
   .result-item:hover {
-    background-color: #f5f5f5;
+    background-color: #f0f7ff; 
   }
 
+  .result-item:nth-child(even) {
+    background-color: #f9f9f9; /* Zebra striping for easier distinction */
+  }
   .result-name {
     font-weight: 500;
+    margin-right: 12px; /* Space between name and type */
+    white-space: normal; /* Allow names to wrap if needed */
+    flex: 1; /* Take available space */
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .result-type {
     color: #777;
     font-size: 0.85em;
+    background-color: #f0f0f0;
+    padding: 3px 8px;
+    border-radius: 12px;
+    white-space: nowrap;
   }
 
   /* Improved no results message */
