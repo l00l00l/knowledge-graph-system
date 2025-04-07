@@ -13,7 +13,7 @@ router = APIRouter()
 
 @router.get("/search", response_model=List[Dict[str, Any]])
 async def search_entities(
-    query: str = Query(..., min_length=1),  # 修改为允许长度为1的查询
+    query: str = Query(..., min_length=1),
     limit: int = Query(10, ge=1, le=50),
     db: Neo4jDatabase = Depends(get_db)
 ):
@@ -22,7 +22,7 @@ async def search_entities(
         # 修改Cypher查询以提高兼容性和性能
         cypher_query = """
         MATCH (n:Entity)
-        WHERE toLower(n.name) CONTAINS toLower($query)
+        WHERE toLower(n.name) CONTAINS toLower($search_text)
         RETURN n.id as id, n.name as name, 
                CASE WHEN n.type IS NOT NULL THEN n.type ELSE (CASE 
                    WHEN size([l IN labels(n) WHERE l <> 'Entity']) > 0 
@@ -32,9 +32,9 @@ async def search_entities(
         LIMIT $limit
         """
         
-        # 执行查询
+        # 执行查询 - 注意这里参数名改为search_text
         async with db.driver.session(database=db.database) as session:
-            result = await session.run(cypher_query, query=query, limit=limit)
+            result = await session.run(cypher_query, search_text=query, limit=limit)
             data = await result.data()
             
             # 确保所有结果的id字段是字符串而不是对象

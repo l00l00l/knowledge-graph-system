@@ -255,6 +255,7 @@
                   <input 
                     type="text" 
                     v-model="targetEntitySearch" 
+                    @keyup.enter="searchTargetEntities"
                     @input="searchTargetEntities"
                     placeholder="搜索实体..." 
                     class="form-input search-input"
@@ -359,6 +360,7 @@
         showDeleteConfirm: false,
         isDeleting: false,
         isSearching: false,
+        searchTimer: null,
         newRelationship: {
           direction: 'outgoing',
           type: '',
@@ -962,49 +964,61 @@
         }
       },
       async searchTargetEntities() {
+        // Trim whitespace from search query
+        const trimmedQuery = this.targetEntitySearch.trim();
+        
         // Clear results if search query is too short
-        if (!this.targetEntitySearch || this.targetEntitySearch.length < 2) {
+        if (!trimmedQuery || trimmedQuery.length < 2) {
           this.searchResults = [];
           return;
         }
         
+        console.log(`Starting entity search for query: "${trimmedQuery}"`);
         this.isSearching = true;
         
         try {
           // First try local search on existing nodes (faster)
-          const query = this.targetEntitySearch.toLowerCase();
+          const query = trimmedQuery.toLowerCase();
+          console.log(`Searching locally through ${this.nodes.length} nodes for "${query}"`);
+          
           const localResults = this.nodes
-            .filter(node => 
+            .filter(node => {
               // Don't include the current entity being edited
-              node.id !== this.editingEntity.id && 
-              // Case insensitive partial match on name
-              node.name.toLowerCase().includes(query)
-            )
-            .slice(0, 10); // Limit to 10 results for performance
+              if (node.id === this.editingEntity?.id) {
+                return false;
+              }
+              
+              // Check if name exists and matches
+              return node.name && node.name.toLowerCase().includes(query);
+            })
+            .slice(0, 10); // Limit to 10 results
           
           // If we have local results, use them
           if (localResults.length > 0) {
-            console.log(`Found ${localResults.length} local matches for query "${query}"`);
+            console.log(`Found ${localResults.length} local matches:`, localResults);
             this.searchResults = localResults;
             this.isSearching = false;
             return;
           }
           
           // If no local results, try API search
-          console.log(`No local matches, searching API for: "${this.targetEntitySearch}"`);
+          console.log(`No local matches, searching API for: "${trimmedQuery}"`);
           
-          // Make sure to URL encode the search query parameter
-          const encodedQuery = encodeURIComponent(this.targetEntitySearch);
-          const response = await fetch(`/api/v1/entities/search?query=${encodedQuery}&limit=10`);
+          const encodedQuery = encodeURIComponent(trimmedQuery);
+          const url = `/api/v1/entities/search?query=${encodedQuery}&limit=10`;
+          console.log(`Sending request to: ${url}`);
+          
+          const response = await fetch(url);
           
           if (!response.ok) {
-            throw new Error(`API search failed: ${response.status} ${response.statusText}`);
+            const errorText = await response.text();
+            console.error(`API error: ${response.status} - ${errorText}`);
+            throw new Error(`API search failed: ${response.status}`);
           }
           
           const data = await response.json();
-          console.log(`API search returned ${data.length} results`);
+          console.log(`API returned ${data.length} results:`, data);
           
-          // Transform API results to expected format
           this.searchResults = data.map(item => ({
             id: item.id,
             name: item.name || 'Unnamed Entity',
@@ -1012,14 +1026,6 @@
           }));
         } catch (error) {
           console.error('Error searching entities:', error);
-          // Fall back to basic local search
-          const query = this.targetEntitySearch.toLowerCase();
-          this.searchResults = this.nodes
-            .filter(node => 
-              node.id !== this.editingEntity.id && 
-              node.name.toLowerCase().includes(query)
-            )
-            .slice(0, 10);
         } finally {
           this.isSearching = false;
         }
@@ -1066,6 +1072,93 @@
         this.showAddRelationship = false;
         this.searchResults = [];
         this.targetEntitySearch = '';
+      },
+
+      // Add this method to handle input changes with debouncing
+      handleInputChange() {
+        // Clear any existing timer
+        if (this.searchTimer) {
+          clearTimeout(this.searchTimer);
+        }
+        
+        // Set a timer to search after typing stops for 500ms
+        this.searchTimer = setTimeout(() => {
+          // Only search if we have enough characters
+          if (this.targetEntitySearch.trim().length >= 2) {
+            this.searchTargetEntities();
+          } else {
+            this.searchResults = [];
+          }
+        }, 500);
+      },
+
+      // Update the searchTargetEntities method
+      async searchTargetEntities() {
+        // Trim whitespace from search query
+        const trimmedQuery = this.targetEntitySearch.trim();
+        
+        // Clear results if search query is too short
+        if (!trimmedQuery || trimmedQuery.length < 2) {
+          this.searchResults = [];
+          return;
+        }
+        
+        console.log(`Starting entity search for query: "${trimmedQuery}"`);
+        this.isSearching = true;
+        
+        try {
+          // First try local search on existing nodes (faster)
+          const query = trimmedQuery.toLowerCase();
+          console.log(`Searching locally through ${this.nodes.length} nodes for "${query}"`);
+          
+          const localResults = this.nodes
+            .filter(node => {
+              // Don't include the current entity being edited
+              if (node.id === this.editingEntity?.id) {
+                return false;
+              }
+              
+              // Check if name exists and matches
+              return node.name && node.name.toLowerCase().includes(query);
+            })
+            .slice(0, 10); // Limit to 10 results
+          
+          // If we have local results, use them
+          if (localResults.length > 0) {
+            console.log(`Found ${localResults.length} local matches:`, localResults);
+            this.searchResults = localResults;
+            this.isSearching = false;
+            return;
+          }
+          
+          // If no local results, try API search
+          console.log(`No local matches, searching API for: "${trimmedQuery}"`);
+          
+          const encodedQuery = encodeURIComponent(trimmedQuery);
+          const url = `/api/v1/entities/search?query=${encodedQuery}&limit=10`;
+          console.log(`Sending request to: ${url}`);
+          
+          const response = await fetch(url);
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`API error: ${response.status} - ${errorText}`);
+            throw new Error(`API search failed: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          console.log(`API returned ${data.length} results:`, data);
+          
+          this.searchResults = data.map(item => ({
+            id: item.id,
+            name: item.name || 'Unnamed Entity',
+            type: item.type || 'entity'
+          }));
+        } catch (error) {
+          console.error('Error searching entities:', error);
+        } finally {
+          this.isSearching = false;
+        }
       },
       resetRelationshipForm() {
         // 重置关系表单数据
