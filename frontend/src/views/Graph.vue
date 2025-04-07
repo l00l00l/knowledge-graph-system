@@ -248,7 +248,7 @@
                   </div>
                 </div>
               </div>
-              
+              <!-- In the add relationship modal content -->
               <div class="form-group">
                 <label>目标实体</label>
                 <div class="entity-search-wrapper">
@@ -262,22 +262,27 @@
                   <span v-if="isSearching" class="search-loading">
                     <i class="fas fa-spinner fa-spin"></i>
                   </span>
-                  <div v-if="searchResults.length > 0" class="search-results">
-                    <div 
-                      v-for="entity in searchResults" 
-                      :key="entity.id" 
-                      class="search-result-item"
-                      @click="selectTargetEntity(entity)"
-                    >
-                      <span>{{ entity.name }}</span>
-                      <small>({{ getEntityTypeName(entity.type) }})</small>
-                    </div>
-                  </div>
-                  <div v-if="searchResults.length === 0 && targetEntitySearch.length >= 2 && !isSearching" class="no-results">
-                    未找到匹配的实体
+                </div>
+                
+                <!-- Search results dropdown -->
+                <div v-if="searchResults.length > 0" class="search-results">
+                  <div 
+                    v-for="entity in searchResults" 
+                    :key="entity.id" 
+                    class="search-result-item"
+                    @click="selectTargetEntity(entity)"
+                  >
+                    <span>{{ entity.name }}</span>
+                    <small>({{ getEntityTypeName(entity.type) }})</small>
                   </div>
                 </div>
                 
+                <!-- No results message -->
+                <div v-if="searchResults.length === 0 && targetEntitySearch.length >= 2 && !isSearching" class="no-results">
+                  未找到匹配的实体
+                </div>
+                
+                <!-- Selected entity display -->
                 <div v-if="newRelationship.targetEntity" class="selected-target-entity">
                   <span>{{ newRelationship.targetEntity.name }}</span>
                   <button @click="newRelationship.targetEntity = null" class="clear-entity-btn">
@@ -285,6 +290,7 @@
                   </button>
                 </div>
               </div>
+              
             </div>
             
             <div class="modal-footer">
@@ -956,6 +962,7 @@
         }
       },
       async searchTargetEntities() {
+        // Clear results if search query is too short
         if (!this.targetEntitySearch || this.targetEntitySearch.length < 2) {
           this.searchResults = [];
           return;
@@ -964,42 +971,48 @@
         this.isSearching = true;
         
         try {
-          // 首先本地搜索现有节点（更快）
+          // First try local search on existing nodes (faster)
           const query = this.targetEntitySearch.toLowerCase();
           const localResults = this.nodes
             .filter(node => 
+              // Don't include the current entity being edited
               node.id !== this.editingEntity.id && 
+              // Case insensitive partial match on name
               node.name.toLowerCase().includes(query)
             )
-            .slice(0, 10); // 限制为10个结果
+            .slice(0, 10); // Limit to 10 results for performance
           
+          // If we have local results, use them
           if (localResults.length > 0) {
+            console.log(`Found ${localResults.length} local matches for query "${query}"`);
             this.searchResults = localResults;
             this.isSearching = false;
             return;
           }
           
-          // 如果本地没有结果，尝试从后端API搜索
-          console.log(`Searching for entities matching: ${this.targetEntitySearch}`);
-          const response = await fetch(`/api/v1/entities/search?query=${encodeURIComponent(this.targetEntitySearch)}&limit=10`);
+          // If no local results, try API search
+          console.log(`No local matches, searching API for: "${this.targetEntitySearch}"`);
+          
+          // Make sure to URL encode the search query parameter
+          const encodedQuery = encodeURIComponent(this.targetEntitySearch);
+          const response = await fetch(`/api/v1/entities/search?query=${encodedQuery}&limit=10`);
           
           if (!response.ok) {
-            console.error(`API error: ${response.status}`);
-            throw new Error(`搜索失败: ${response.status}`);
+            throw new Error(`API search failed: ${response.status} ${response.statusText}`);
           }
           
           const data = await response.json();
-          console.log(`Found ${data.length} results from API`);
+          console.log(`API search returned ${data.length} results`);
           
-          // 确保结果格式正确
+          // Transform API results to expected format
           this.searchResults = data.map(item => ({
             id: item.id,
-            name: item.name,
-            type: item.type
+            name: item.name || 'Unnamed Entity',
+            type: item.type || 'entity'
           }));
         } catch (error) {
           console.error('Error searching entities:', error);
-          // 在出错时，回退到本地搜索
+          // Fall back to basic local search
           const query = this.targetEntitySearch.toLowerCase();
           this.searchResults = this.nodes
             .filter(node => 
@@ -2044,18 +2057,22 @@
     top: 100%;
     left: 0;
     right: 0;
+    z-index: 20;
+    max-height: 200px;
+    overflow-y: auto;
     background-color: white;
     border: 1px solid #ddd;
     border-radius: 0 0 4px 4px;
-    max-height: 200px;
-    overflow-y: auto;
-    z-index: 10;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   }
 
   .search-result-item {
     padding: 8px 12px;
     cursor: pointer;
     border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
   .search-result-item:last-child {
@@ -2241,6 +2258,7 @@
     padding: 10px;
     text-align: center;
     color: #999;
+    font-style: italic;
     background-color: white;
     border: 1px solid #ddd;
     border-radius: 0 0 4px 4px;
