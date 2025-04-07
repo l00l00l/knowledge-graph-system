@@ -256,7 +256,7 @@
                     type="text" 
                     v-model="targetEntitySearch" 
                     @keyup.enter="searchTargetEntities"
-                    @input="searchTargetEntities"
+                    @input="handleInputChange"
                     placeholder="搜索实体..." 
                     class="form-input search-input"
                   >
@@ -279,7 +279,7 @@
                 </div>
                 
                 <!-- No results message -->
-                <div v-if="searchResults.length === 0 && targetEntitySearch.length >= 2 && !isSearching" class="no-results">
+                <div v-if="searchResults.length === 0 && targetEntitySearch.length >= 1 && !isSearching" class="no-results">
                   未找到匹配的实体
                 </div>
                 
@@ -967,8 +967,8 @@
         // Trim whitespace from search query
         const trimmedQuery = this.targetEntitySearch.trim();
         
-        // Clear results if search query is too short
-        if (!trimmedQuery || trimmedQuery.length < 2) {
+        // Clear results if search query is empty
+        if (!trimmedQuery || trimmedQuery.length < 1) {
           this.searchResults = [];
           return;
         }
@@ -1083,8 +1083,8 @@
         
         // Set a timer to search after typing stops for 500ms
         this.searchTimer = setTimeout(() => {
-          // Only search if we have enough characters
-          if (this.targetEntitySearch.trim().length >= 2) {
+          // Only search if we have at least one character
+          if (this.targetEntitySearch.trim().length >= 1) {
             this.searchTargetEntities();
           } else {
             this.searchResults = [];
@@ -1092,74 +1092,7 @@
         }, 500);
       },
 
-      // Update the searchTargetEntities method
-      async searchTargetEntities() {
-        // Trim whitespace from search query
-        const trimmedQuery = this.targetEntitySearch.trim();
-        
-        // Clear results if search query is too short
-        if (!trimmedQuery || trimmedQuery.length < 2) {
-          this.searchResults = [];
-          return;
-        }
-        
-        console.log(`Starting entity search for query: "${trimmedQuery}"`);
-        this.isSearching = true;
-        
-        try {
-          // First try local search on existing nodes (faster)
-          const query = trimmedQuery.toLowerCase();
-          console.log(`Searching locally through ${this.nodes.length} nodes for "${query}"`);
-          
-          const localResults = this.nodes
-            .filter(node => {
-              // Don't include the current entity being edited
-              if (node.id === this.editingEntity?.id) {
-                return false;
-              }
-              
-              // Check if name exists and matches
-              return node.name && node.name.toLowerCase().includes(query);
-            })
-            .slice(0, 10); // Limit to 10 results
-          
-          // If we have local results, use them
-          if (localResults.length > 0) {
-            console.log(`Found ${localResults.length} local matches:`, localResults);
-            this.searchResults = localResults;
-            this.isSearching = false;
-            return;
-          }
-          
-          // If no local results, try API search
-          console.log(`No local matches, searching API for: "${trimmedQuery}"`);
-          
-          const encodedQuery = encodeURIComponent(trimmedQuery);
-          const url = `/api/v1/entities/search?query=${encodedQuery}&limit=10`;
-          console.log(`Sending request to: ${url}`);
-          
-          const response = await fetch(url);
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`API error: ${response.status} - ${errorText}`);
-            throw new Error(`API search failed: ${response.status}`);
-          }
-          
-          const data = await response.json();
-          console.log(`API returned ${data.length} results:`, data);
-          
-          this.searchResults = data.map(item => ({
-            id: item.id,
-            name: item.name || 'Unnamed Entity',
-            type: item.type || 'entity'
-          }));
-        } catch (error) {
-          console.error('Error searching entities:', error);
-        } finally {
-          this.isSearching = false;
-        }
-      },
+    
       resetRelationshipForm() {
         // 重置关系表单数据
         this.newRelationship = {
@@ -2176,13 +2109,6 @@
     background-color: #f5f5f5;
   }
 
-  .selected-target-entity {
-    margin-top: 10px;
-    padding: 8px;
-    background-color: #e3f2fd;
-    border-radius: 4px;
-    color: #0277bd;
-  }
 
   /* Add these styles to the <style> section in Graph.vue */
   .form-section {
