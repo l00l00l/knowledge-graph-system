@@ -579,26 +579,16 @@
           // Clear existing relationships first
           this.entityRelationships = [];
           
-          // Load relationships immediately without timeout
-          this.entityRelationships = this.getMockRelationships(entity.id);
+          // Make sure we're passing a string ID
+          const entityId = typeof entity.id === 'object' ? entity.id.id : entity.id;
+          this.entityRelationships = this.getMockRelationships(entityId);
           console.log('Retrieved relationships:', this.entityRelationships);
-          
-          // In a production environment, you would use this code instead:
-          /*
-          const response = await fetch(`/api/v1/entities/${entity.id}/relationships`);
-          if (response.ok) {
-            const data = await response.json();
-            this.entityRelationships = data;
-          }
-          */
         } catch (error) {
           console.error('Error fetching relationships:', error);
           this.entityRelationships = [];
         }
       },
       
-
-
       getMockRelationships(entityId) {
         // Generate mock relationships for demo purposes
         const rels = [];
@@ -607,8 +597,13 @@
         
         // Find incoming relationships
         this.relationships.forEach(rel => {
-          if (rel.target === entityId) {
-            const sourceEntity = this.nodes.find(n => n.id === rel.source);
+          // Handle both string IDs and object references
+          const relTarget = typeof rel.target === 'object' ? rel.target.id : rel.target;
+          
+          if (relTarget === entityId) {
+            const sourceId = typeof rel.source === 'object' ? rel.source.id : rel.source;
+            const sourceEntity = this.nodes.find(n => n.id === sourceId);
+            
             if (sourceEntity) {
               console.log(`Found incoming relationship: ${sourceEntity.name} -> ${entityId}`);
               rels.push({
@@ -623,8 +618,13 @@
         
         // Find outgoing relationships
         this.relationships.forEach(rel => {
-          if (rel.source === entityId) {
-            const targetEntity = this.nodes.find(n => n.id === rel.target);
+          // Handle both string IDs and object references
+          const relSource = typeof rel.source === 'object' ? rel.source.id : rel.source;
+          
+          if (relSource === entityId) {
+            const targetId = typeof rel.target === 'object' ? rel.target.id : rel.target;
+            const targetEntity = this.nodes.find(n => n.id === targetId);
+            
             if (targetEntity) {
               console.log(`Found outgoing relationship: ${entityId} -> ${targetEntity.name}`);
               rels.push({
@@ -814,7 +814,7 @@
           container.appendChild(emptyMessage);
           return;
         }
-
+        
         console.log(`Initializing graph with ${this.nodes.length} nodes and ${this.relationships.length} links`);
         
         // Set up dimensions
