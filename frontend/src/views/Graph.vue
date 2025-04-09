@@ -1271,7 +1271,7 @@
         
         // 准备更新的实体数据
         const updatedEntity = {
-          ...this.editingEntity,
+          id: this.editingEntity.id,
           name: this.editFormData.name,
           type: this.editFormData.type,
           description: this.editFormData.description,
@@ -1292,7 +1292,8 @@
           
           console.log('Update response status:', response.status);
           if (!response.ok) {
-            throw new Error(`Failed to update entity: ${response.status}`);
+            const errorText = await response.text();
+            throw new Error(`实体更新失败: ${response.status} - ${errorText}`);
           }
           
           const updatedEntityData = await response.json();
