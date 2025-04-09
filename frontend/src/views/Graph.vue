@@ -574,18 +574,14 @@
         this.selectedEntity = entity;
         
         try {
-          // In a real app, we would fetch relationships from the backend
-          // For now, we'll use the mock data but add a fetch simulation
           console.log('Fetching relationships for entity:', entity.id);
           
           // Clear existing relationships first
           this.entityRelationships = [];
           
-          // Set after a brief delay to simulate API call
-          setTimeout(() => {
-            this.entityRelationships = this.getMockRelationships(entity.id);
-            console.log('Retrieved relationships:', this.entityRelationships);
-          }, 100);
+          // Load relationships immediately without timeout
+          this.entityRelationships = this.getMockRelationships(entity.id);
+          console.log('Retrieved relationships:', this.entityRelationships);
           
           // In a production environment, you would use this code instead:
           /*
@@ -607,11 +603,14 @@
         // Generate mock relationships for demo purposes
         const rels = [];
         
+        console.log(`Getting relationships for entity ${entityId} from ${this.relationships.length} total relationships`);
+        
         // Find incoming relationships
         this.relationships.forEach(rel => {
           if (rel.target === entityId) {
             const sourceEntity = this.nodes.find(n => n.id === rel.source);
             if (sourceEntity) {
+              console.log(`Found incoming relationship: ${sourceEntity.name} -> ${entityId}`);
               rels.push({
                 id: rel.id,
                 type: rel.type,
@@ -627,6 +626,7 @@
           if (rel.source === entityId) {
             const targetEntity = this.nodes.find(n => n.id === rel.target);
             if (targetEntity) {
+              console.log(`Found outgoing relationship: ${entityId} -> ${targetEntity.name}`);
               rels.push({
                 id: rel.id,
                 type: rel.type,
@@ -637,6 +637,7 @@
           }
         });
         
+        console.log(`Total relationships found for entity ${entityId}: ${rels.length}`);
         return rels;
       },
       
@@ -653,8 +654,11 @@
       },
       
 
+      // Update this method to explicitly log and ensure relationships are available for editing
       editEntity() {
         console.log('Edit entity:', this.selectedEntity);
+        console.log('Current relationships before edit:', this.entityRelationships);
+        
         this.isEditing = true;
         this.editingEntity = JSON.parse(JSON.stringify(this.selectedEntity));
         
@@ -665,18 +669,22 @@
           properties: {...this.selectedEntity.properties}
         };
         
-        // 重置并直接设置分类，不使用 setTimeout
+        // Reset and directly set category, not using setTimeout
         this.selectedEntityTypeCategory = '';
         
-        // 根据当前实体类型查找对应的分类并设置
+        // Find the corresponding category based on current entity type
         if (this.selectedEntity.type && this.entityTypes.length > 0) {
           const entityType = this.entityTypes.find(t => t.type_code === this.selectedEntity.type);
           if (entityType) {
-            // 直接设置分类变量，不需要 setTimeout 和 forceUpdate
             this.selectedEntityTypeCategory = entityType.category;
             console.log('Updated selected entity category to:', this.selectedEntityTypeCategory);
           }
         }
+        
+        // This is critical - explicitly refresh relationships when editing
+        // Don't rely on existing relationships being loaded
+        this.entityRelationships = this.getMockRelationships(this.selectedEntity.id);
+        console.log('Refreshed relationships for editing:', this.entityRelationships);
       },
             
       traceKnowledge() {
