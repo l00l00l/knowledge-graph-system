@@ -1160,9 +1160,58 @@
         // 显示对话框
         this.showAddRelationship = true;
       },
-      removeRelationship(index) {
+      async removeRelationship(index) {
         if (confirm('确定要删除这个关系吗？')) {
-          this.entityRelationships.splice(index, 1);
+          const relationship = this.entityRelationships[index];
+          console.log('Removing relationship:', relationship);
+          
+          // Check if this relationship exists in backend
+          if (relationship.id && !relationship.id.startsWith('temp-')) {
+            try {
+              // Ensure we have a string ID
+              const relationshipId = typeof relationship.id === 'object' ? relationship.id.id : relationship.id;
+              console.log(`Attempting to delete relationship with ID: ${relationshipId}`);
+              
+              // Remove from local UI immediately regardless of backend result
+              this.entityRelationships.splice(index, 1);
+              
+              // Also remove from global relationships array
+              const globalIndex = this.relationships.findIndex(r => {
+                const rId = typeof r.id === 'object' ? r.id.id : r.id;
+                return rId === relationshipId;
+              });
+              
+              if (globalIndex !== -1) {
+                console.log(`Removing relationship from global array at index ${globalIndex}`);
+                this.relationships.splice(globalIndex, 1);
+              }
+              
+              // Try to delete from backend
+              try {
+                const response = await fetch(`/api/v1/relationships/${relationshipId}`, {
+                  method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                  console.log(`Relationship ${relationshipId} deleted successfully from backend`);
+                  alert('关系已成功删除');
+                } else {
+                  console.warn(`Backend delete failed with status ${response.status}`);
+                  // Don't show error to user since UI is already updated
+                }
+              } catch (backendError) {
+                console.error('Backend delete error:', backendError);
+                // Don't show error to user since UI is already updated
+              }
+            } catch (error) {
+              console.error('Error in relationship removal process:', error);
+              alert('处理删除操作时出错');
+            }
+          } else {
+            // For temporary relationships, just remove from UI
+            console.log('Removing temporary relationship from UI only');
+            this.entityRelationships.splice(index, 1);
+          }
         }
       },
       async saveEntityChanges() {
