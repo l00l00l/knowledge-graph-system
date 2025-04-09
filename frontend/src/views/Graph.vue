@@ -1184,10 +1184,22 @@
               if (globalIndex !== -1) {
                 console.log(`Removing relationship from global array at index ${globalIndex}`);
                 this.relationships.splice(globalIndex, 1);
+              } else {
+                console.warn(`Relationship with ID ${relationshipId} not found in global relationships array`);
+                // Try alternative matching strategy for global relationships
+                const altIndex = this.relationships.findIndex(r => 
+                  (r.source === this.editingEntity.id && r.target === relationship.target.id) || 
+                  (r.target === this.editingEntity.id && r.source === relationship.target.id)
+                );
+                if (altIndex !== -1) {
+                  console.log(`Found relationship by entity IDs at index ${altIndex}`);
+                  this.relationships.splice(altIndex, 1);
+                }
               }
               
               // Try to delete from backend
               try {
+                console.log(`Sending DELETE request to: /api/v1/relationships/${relationshipId}`);
                 const response = await fetch(`/api/v1/relationships/${relationshipId}`, {
                   method: 'DELETE'
                 });
@@ -1197,11 +1209,11 @@
                   alert('关系已成功删除');
                 } else {
                   console.warn(`Backend delete failed with status ${response.status}`);
-                  // Don't show error to user since UI is already updated
+                  // Still remove from frontend data even if backend fails
                 }
               } catch (backendError) {
                 console.error('Backend delete error:', backendError);
-                // Don't show error to user since UI is already updated
+                // Continue with UI update regardless of backend error
               }
             } catch (error) {
               console.error('Error in relationship removal process:', error);
