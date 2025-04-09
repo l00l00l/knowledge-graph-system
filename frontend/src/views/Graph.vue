@@ -679,12 +679,25 @@
         
         this.isEditing = true;
         this.editingEntity = JSON.parse(JSON.stringify(this.selectedEntity));
+
+        // 确保properties是一个对象，即使数据库返回的是null或undefined
+        let entityProperties = this.selectedEntity.properties || {};
+        
+        // 如果properties是字符串（可能是JSON字符串），尝试解析
+        if (typeof entityProperties === 'string') {
+          try {
+            entityProperties = JSON.parse(entityProperties);
+          } catch (e) {
+            console.error('Error parsing properties:', e);
+            entityProperties = {};
+          }
+        }
         
         this.editFormData = {
           name: this.selectedEntity.name,
           type: this.selectedEntity.type,
           description: this.selectedEntity.description || '',
-          properties: {...this.selectedEntity.properties}
+          properties: {...entityProperties}
         };
         
         // 重置和直接设置类别
@@ -1284,6 +1297,12 @@
           
           const updatedEntityData = await response.json();
           console.log('Entity update successful, received data:', updatedEntityData);
+
+          // 确保返回的数据包含properties
+          if (!updatedEntityData.properties) {
+            updatedEntityData.properties = {};
+            console.warn('Returned entity data does not contain properties, adding empty object');
+          }
           
           // 处理关系
           console.log('Updating relationships:', this.entityRelationships);
@@ -1380,8 +1399,10 @@
           // 刷新数据以显示更新的关系
           await this.fetchGraphData();
           
-          // 重新选择实体以查看更新的关系
-          await this.selectEntity(updatedEntityData);
+          // 重新选择实体以查看更新的数据
+        setTimeout(() => {
+          this.selectEntity(updatedEntityData);
+        }, 300);
           
           // 显示成功消息
           alert('实体及关系更新成功');
