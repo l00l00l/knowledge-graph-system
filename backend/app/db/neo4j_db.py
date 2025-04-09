@@ -366,3 +366,37 @@ class Neo4jDatabase(DatabaseInterface[T]):
         except Exception as e:
             print(f"Error in _update_entity: {e}")
             raise e
+    async def delete_relationship(self, id: UUID) -> bool:
+        """删除关系"""
+        try:
+            # 确保ID是字符串
+            rel_id = str(id)
+            print(f"尝试删除关系，ID: {rel_id}")
+            
+            # 针对关系的特定查询
+            query = """
+            MATCH ()-[r]-()
+            WHERE r.id = $id
+            DELETE r
+            RETURN count(r) as deleted_count
+            """
+            
+            async with self.driver.session(database=self.database) as session:
+                result = await session.run(query, id=rel_id)
+                data = await result.data()
+                
+                # 检查是否有关系被删除
+                if data and len(data) > 0:
+                    deleted_count = data[0].get('deleted_count', 0)
+                    success = deleted_count > 0
+                else:
+                    success = False
+                
+                print(f"关系删除操作结果: {success}, 记录: {data}")
+                
+                return success
+        except Exception as e:
+            print(f"删除关系方法出错: {e}")
+            import traceback
+            traceback.print_exc()
+            return False

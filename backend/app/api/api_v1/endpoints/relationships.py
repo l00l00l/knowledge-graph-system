@@ -70,7 +70,7 @@ async def delete_relationship(
     db: Neo4jDatabase = Depends(get_db)
 ):
     """删除关系"""
-    success = await db.delete(relationship_id)
+    success = await db.delete_relationship(relationship_id)
     if not success:
         raise HTTPException(status_code=404, detail="Relationship not found")
     return success
