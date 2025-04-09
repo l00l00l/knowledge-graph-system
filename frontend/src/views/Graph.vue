@@ -370,6 +370,7 @@
         isDeleting: false,
         isSearching: false,
         searchTimer: null,
+        originalRelationships: [],
         newRelationship: {
           direction: 'outgoing',
           type: '',
@@ -669,10 +670,10 @@
           properties: {...this.selectedEntity.properties}
         };
         
-        // Reset and directly set category, not using setTimeout
+        // 重置和直接设置类别
         this.selectedEntityTypeCategory = '';
         
-        // Find the corresponding category based on current entity type
+        // 基于当前实体类型找到对应的类别
         if (this.selectedEntity.type && this.entityTypes.length > 0) {
           const entityType = this.entityTypes.find(t => t.type_code === this.selectedEntity.type);
           if (entityType) {
@@ -681,10 +682,13 @@
           }
         }
         
-        // This is critical - explicitly refresh relationships when editing
-        // Don't rely on existing relationships being loaded
+        // 刷新关系
         this.entityRelationships = this.getMockRelationships(this.selectedEntity.id);
         console.log('Refreshed relationships for editing:', this.entityRelationships);
+        
+        // 新增：保存原始关系列表的副本，用于后续比较
+        this.originalRelationships = JSON.parse(JSON.stringify(this.entityRelationships));
+        console.log('Saved original relationships:', this.originalRelationships);
       },
             
       traceKnowledge() {
@@ -1229,13 +1233,13 @@
       async saveEntityChanges() {
         console.log('Saving entity changes');
         
-        // Check if we have an entity ID
+        // 检查是否有实体ID
         if (!this.editingEntity || !this.editingEntity.id) {
           alert('缺少实体ID，无法更新');
           return;
         }
         
-        // Prepare the updated entity data
+        // 准备更新的实体数据
         const updatedEntity = {
           ...this.editingEntity,
           name: this.editFormData.name,
@@ -1247,7 +1251,7 @@
         console.log('Sending update request for entity:', updatedEntity);
         
         try {
-          // First update the entity
+          // 首先更新实体
           const response = await fetch(`/api/v1/entities/${this.editingEntity.id}`, {
             method: 'PUT',
             headers: {
@@ -1264,14 +1268,23 @@
           const updatedEntityData = await response.json();
           console.log('Entity update successful, received data:', updatedEntityData);
           
-          // Now handle relationships
+          // 处理关系
           console.log('Updating relationships:', this.entityRelationships);
+          console.log('Original relationships:', this.originalRelationships);
           
-          // Process each relationship
+          // 新增：找出被删除的关系
+          const currentRelationshipIds = new Set(this.entityRelationships.map(rel => rel.id));
+          const deletedRelationships = this.originalRelationships.filter(
+            rel => !rel.id.startsWith('temp-') && !currentRelationshipIds.has(rel.id)
+          );
+          
+          console.log('Identified deleted relationships:', deletedRelationships);
+          
+          // 处理新关系创建
           const relationshipPromises = this.entityRelationships.map(async relationship => {
-            // Skip relationships that don't have an id yet or have already been processed
+            // 跳过已有ID的关系或已处理的关系
             if (!relationship.id || relationship.id.startsWith('temp-')) {
-              // This is a new relationship
+              // 这是新关系
               const relationshipData = {
                 type: relationship.type,
                 source_id: relationship.direction === 'outgoing' ? this.editingEntity.id : relationship.target.id,
@@ -1283,7 +1296,7 @@
               
               console.log('Creating new relationship:', relationshipData);
               
-              // Send API request to create relationship
+              // 发送API请求创建关系
               const relResponse = await fetch('/api/v1/relationships/', {
                 method: 'POST',
                 headers: {
@@ -1300,36 +1313,60 @@
               return true;
             }
             
-            return true; // Skip existing relationships for now
+            return true; // 跳过现有关系
           });
           
-          // Wait for all relationship updates to complete
-          const results = await Promise.all(relationshipPromises);
+          // 新增：处理删除关系的请求
+          const deletePromises = deletedRelationships.map(async rel => {
+            const relationshipId = typeof rel.id === 'object' ? rel.id.id : rel.id;
+            console.log(`Deleting relationship with ID: ${relationshipId}`);
+            
+            try {
+              const response = await fetch(`/api/v1/relationships/${relationshipId}`, {
+                method: 'DELETE'
+              });
+              
+              if (!response.ok) {
+                console.error(`Failed to delete relationship ${relationshipId}:`, await response.text());
+                return false;
+              }
+              
+              console.log(`Successfully deleted relationship ${relationshipId}`);
+              return true;
+            } catch (error) {
+              console.error(`Error deleting relationship ${relationshipId}:`, error);
+              return false;
+            }
+          });
           
-          if (results.some(result => !result)) {
-            console.warn('Some relationships failed to update');
+          // 等待所有关系操作完成
+          const createResults = await Promise.all(relationshipPromises);
+          const deleteResults = await Promise.all(deletePromises);
+          
+          if (createResults.some(result => !result) || deleteResults.some(result => !result)) {
+            console.warn('Some relationship operations failed');
           }
           
-          // Update the entity in the nodes array
+          // 更新节点数组中的实体
           const index = this.nodes.findIndex(node => node.id === updatedEntityData.id);
           if (index !== -1) {
             this.nodes[index] = updatedEntityData;
           }
           
-          // Update selected entity
+          // 更新选中的实体
           this.selectedEntity = updatedEntityData;
           
-          // Reset edit mode
+          // 重置编辑模式
           this.isEditing = false;
           this.editingEntity = null;
           
-          // Refresh the data to show updated relationships
+          // 刷新数据以显示更新的关系
           await this.fetchGraphData();
           
-          // Re-select the entity to see the updated relationships
+          // 重新选择实体以查看更新的关系
           await this.selectEntity(updatedEntityData);
           
-          // Show success message
+          // 显示成功消息
           alert('实体及关系更新成功');
         } catch (error) {
           console.error('Error updating entity:', error);
