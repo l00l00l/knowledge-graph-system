@@ -684,20 +684,23 @@
         let entityProperties = this.selectedEntity.properties || {};
         
         // 如果properties是字符串（可能是JSON字符串），尝试解析
-        if (typeof entityProperties === 'string') {
-          try {
-            entityProperties = JSON.parse(entityProperties);
-          } catch (e) {
-            console.error('Error parsing properties:', e);
-            entityProperties = {};
+        if (this.selectedEntity.properties) {
+          if (typeof this.selectedEntity.properties === 'string') {
+            try {
+              entityProperties = JSON.parse(this.selectedEntity.properties);
+            } catch (e) {
+              console.error('Error parsing properties string:', e);
+              entityProperties = {};
+            }
+          } else if (typeof this.selectedEntity.properties === 'object') {
+            entityProperties = {...this.selectedEntity.properties};
           }
         }
-        
         this.editFormData = {
           name: this.selectedEntity.name,
           type: this.selectedEntity.type,
           description: this.selectedEntity.description || '',
-          properties: {...entityProperties}
+          properties: entityProperties
         };
         
         // 重置和直接设置类别
@@ -1268,14 +1271,28 @@
           alert('缺少实体ID，无法更新');
           return;
         }
-        
+        // 打印修改前的属性，检查格式
+        console.log('Original properties:', this.editingEntity.properties);
+        console.log('Edited properties:', this.editFormData.properties);
+
+        // 确保properties是对象而不是字符串
+        let properties = this.editFormData.properties;
+        if (typeof properties === 'string') {
+          try {
+            properties = JSON.parse(properties);
+          } catch (e) {
+            console.error('Error parsing properties string:', e);
+            properties = {}; // 防止错误，使用空对象
+          }
+        }
+  
         // 准备更新的实体数据
         const updatedEntity = {
-          id: this.editingEntity.id,
+          ...this.editingEntity,
           name: this.editFormData.name,
           type: this.editFormData.type,
           description: this.editFormData.description,
-          properties: this.editFormData.properties
+          properties: properties
         };
         
         console.log('Sending update request for entity:', updatedEntity);
@@ -1299,12 +1316,20 @@
           const updatedEntityData = await response.json();
           console.log('Entity update successful, received data:', updatedEntityData);
 
-          // 确保返回的数据包含properties
+          // 重要：确保返回的数据包含properties并正确处理
           if (!updatedEntityData.properties) {
             updatedEntityData.properties = {};
             console.warn('Returned entity data does not contain properties, adding empty object');
+          } else if (typeof updatedEntityData.properties === 'string') {
+            try {
+              updatedEntityData.properties = JSON.parse(updatedEntityData.properties);
+              console.log('Parsed properties from string:', updatedEntityData.properties);
+            } catch (e) {
+              console.error('Error parsing returned properties:', e);
+              updatedEntityData.properties = {};
+            }
           }
-          
+                
           // 处理关系
           console.log('Updating relationships:', this.entityRelationships);
           console.log('Original relationships:', this.originalRelationships);
