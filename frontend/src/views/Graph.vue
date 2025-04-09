@@ -140,22 +140,39 @@
               <!-- Replace the edit form "Properties" section with this improved version -->
               <div class="form-section">
                 <h4 class="section-title">属性</h4>
-                <button @click="addEntityProperty" class="add-property-btn">
-                  <i class="fas fa-plus"></i> 添加属性
-                </button>
+                <div class="property-actions">
+                  <button @click="addEntityProperty" class="add-property-btn">
+                    <i class="fas fa-plus"></i> 添加属性
+                  </button>
+                </div>
                 
                 <div v-if="Object.keys(editFormData.properties).length === 0" class="no-data-message">
-                  暂无属性数据
+                  <i class="fas fa-info-circle"></i> 暂无属性数据
                 </div>
                 
                 <div v-else class="properties-list">
                   <div v-for="(value, key) in editFormData.properties" :key="key" class="property-edit-row">
-                    <div class="property-key">{{ key }}:</div>
-                    <input type="text" v-model="editFormData.properties[key]" class="property-value-input">
-                    <button @click="removeEntityProperty(key)" class="remove-property-btn">
-                      <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="property-key" @click="editPropertyKey(key)" title="点击修改属性名">
+                      {{ key }}:
+                    </div>
+                    <div class="property-value-container">
+                      <input 
+                        type="text" 
+                        v-model="editFormData.properties[key]" 
+                        class="property-value-input"
+                        :placeholder="getPropertyPlaceholder(key)"
+                      >
+                    </div>
+                    <div class="property-actions">
+                      <button @click="removeEntityProperty(key)" class="remove-property-btn" title="删除属性">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
                   </div>
+                </div>
+                
+                <div class="tips-section">
+                  <p><i class="fas fa-lightbulb"></i> 提示：点击属性名可修改属性键名</p>
                 </div>
               </div>
 
@@ -1379,10 +1396,45 @@
         this.editingEntity = null;
       },
 
+      // 添加实体属性
       addEntityProperty() {
-        const key = prompt('请输入属性名称:');
-        if (key && key.trim()) {
-          this.editFormData.properties[key.trim()] = '';
+        this.$nextTick(() => {
+          const key = prompt('请输入属性名称:');
+          if (key && key.trim()) {
+            // 检查属性是否已存在
+            if (this.editFormData.properties[key.trim()]) {
+              alert(`属性 "${key.trim()}" 已存在！`);
+              return;
+            }
+            
+            // 添加新属性
+            const updatedProperties = {...this.editFormData.properties};
+            updatedProperties[key.trim()] = '';
+            this.editFormData.properties = updatedProperties;
+          }
+        });
+      },
+      // 修改属性键名
+      editPropertyKey(oldKey) {
+        const newKey = prompt('请输入新的属性名称:', oldKey);
+        if (newKey && newKey.trim() && newKey.trim() !== oldKey) {
+          // 检查新键名是否已存在
+          if (this.editFormData.properties[newKey.trim()]) {
+            alert(`属性 "${newKey.trim()}" 已存在！`);
+            return;
+          }
+          
+          // 创建一个新的属性对象，保持顺序
+          const updatedProperties = {};
+          for (const [key, value] of Object.entries(this.editFormData.properties)) {
+            if (key === oldKey) {
+              updatedProperties[newKey.trim()] = value;
+            } else {
+              updatedProperties[key] = value;
+            }
+          }
+          
+          this.editFormData.properties = updatedProperties;
         }
       },
 
@@ -1392,6 +1444,22 @@
           delete updatedProperties[key];
           this.editFormData.properties = updatedProperties;
         }
+      },
+
+      // 根据属性键名获取占位符文本
+      getPropertyPlaceholder(key) {
+        const placeholders = {
+          'domain': '例如：知识图谱、人工智能...',
+          'importance': '1-5的数字表示重要性',
+          'status': '例如：活跃、已归档...',
+          'created': '创建日期，如：2025-01-01',
+          'updated': '更新日期，如：2025-01-01',
+          'source': '知识来源',
+          'author': '作者或创建者',
+          'related': '相关概念，用逗号分隔'
+        };
+        
+        return placeholders[key] || '输入属性值...';
       },
       // Add these helper methods
       dragStarted(event, d) {
@@ -1668,12 +1736,6 @@
   .property-item {
     display: flex;
     margin-bottom: 8px;
-  }
-  
-  .property-key {
-    font-weight: 500;
-    width: 120px;
-    flex-shrink: 0;
   }
   
   .property-value {
@@ -2055,9 +2117,14 @@
   .property-edit-row {
     display: flex;
     align-items: center;
-    padding: 10px 12px;
+    padding: 12px;
     border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s;
   }
+  .property-edit-row:hover {
+    background-color: #f9f9f9;
+  }
+
   .property-edit-row:last-child {
     border-bottom: none;
   }
@@ -2066,16 +2133,32 @@
     font-weight: 500;
     color: #555;
     padding-right: 10px;
+    cursor: pointer;
+    border-bottom: 1px dashed transparent;
+    transition: all 0.2s;
   }
 
-  .property-value-input {
+  .property-key:hover {
+    border-bottom-color: #999;
+    color: #000;
+  }
+
+  .property-value-container {
     flex: 1;
-    padding: 8px 10px;
+  }
+  .property-value-input {
+    width: 100%;
+    padding: 8px 12px;
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
   }
-
+  .property-value-input:focus {
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+    outline: none;
+  }
   .add-property-btn {
     display: flex;
     align-items: center;
@@ -2087,7 +2170,7 @@
     border-radius: 4px;
     font-size: 14px;
     cursor: pointer;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
     transition: background-color 0.2s;
   }
   .add-property-btn:hover {
@@ -2098,12 +2181,22 @@
     border: none;
     color: #d9534f;
     cursor: pointer;
-    padding: 0 5px;
+    padding: 5px;
+    border-radius: 50%;
+    transition: all 0.2s;
   }
   .remove-property-btn:hover {
     background-color: #ffebee;
   }
-
+  .tips-section {
+    margin-top: 15px;
+    font-size: 0.85rem;
+    color: #666;
+    background-color: #fffde7;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border-left: 3px solid #fbc02d;
+  }
   .save-btn {
     padding: 8px 20px;
     background-color: #4caf50;
@@ -2322,7 +2415,7 @@
   }
 
   .property-actions, .relationship-actions {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
 
   .action-btn {
@@ -2375,29 +2468,17 @@
     border-bottom: none;
   }
 
-  .property-key {
-    width: 120px;
-    font-weight: 500;
-    color: #555;
-  }
-
-  .property-value-input {
-    flex: 1;
-    padding: 6px 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 14px;
-  }
 
   .no-data-message {
     padding: 16px;
     text-align: center;
     color: #999;
     font-style: italic;
-    background-color: #fff;
+    background-color: #f9f9f9;
     border: 1px dashed #ddd;
     border-radius: 4px;
-
+    margin-bottom: 16px;
+  }
   .radio-option {
     display: flex;
     align-items: center;
@@ -2672,5 +2753,5 @@
     background-color: rgba(0, 0, 0, 0.05);
     color: #f44336;
   }
-  }
+  
   </style>
