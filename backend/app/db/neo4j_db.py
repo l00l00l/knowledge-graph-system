@@ -42,7 +42,8 @@ class Neo4jDatabase(DatabaseInterface[T]):
         """创建实体节点"""
         # 将Pydantic模型转为字典，避免非Neo4j支持的类型
         entity_dict = entity.dict()
-        props = {k: v for k, v in entity_dict.items() if v is not None and k != 'type'}
+        #props = {k: v for k, v in entity_dict.items() if v is not None and k != 'type'}
+        props = {k: v for k, v in entity_dict.items() if v is not None}
         
         # 将复杂类型转换为JSON字符串
         for k, v in props.items():
