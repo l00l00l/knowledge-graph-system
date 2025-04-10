@@ -589,21 +589,80 @@
       
       async selectEntity(entity) {
         console.log('Selecting entity:', entity);
-        this.selectedEntity = entity;
+        
+        // 获取实体ID，确保是字符串格式 - 移动到try/catch外部
+        const entityId = typeof entity.id === 'object' ? entity.id.id : entity.id;
         
         try {
-          console.log('Fetching relationships for entity:', entity.id);
+          // 直接从API获取最新的实体详情
+          const response = await fetch(`/api/v1/entities/${entityId}`);
           
-          // Clear existing relationships first
-          this.entityRelationships = [];
+          if (!response.ok) {
+            throw new Error(`获取实体详情失败: ${response.status}`);
+          }
           
-          // Make sure we're passing a string ID
-          const entityId = typeof entity.id === 'object' ? entity.id.id : entity.id;
-          this.entityRelationships = this.getMockRelationships(entityId);
-          console.log('Retrieved relationships:', this.entityRelationships);
+          // 获取完整的实体数据
+          const fullEntityData = await response.json();
+          console.log('Retrieved full entity data:', fullEntityData);
+          
+          // 关键修复：确保properties是对象而不是字符串
+          if (fullEntityData.properties) {
+            if (typeof fullEntityData.properties === 'string') {
+              try {
+                fullEntityData.properties = JSON.parse(fullEntityData.properties);
+              } catch (e) {
+                console.error('Error parsing properties:', e);
+                fullEntityData.properties = {};
+              }
+            }
+          } else {
+            fullEntityData.properties = {};
+          }
+          
+          // 更新选中的实体
+          this.selectedEntity = fullEntityData;
+          
+          // 获取实体的关系数据 - 从API获取上下文而不是使用本地方法
+          try {
+            const contextResponse = await fetch(`/api/v1/entities/${entityId}/context`);
+            if (contextResponse.ok) {
+              const contextData = await contextResponse.json();
+              console.log('Context data:', contextData);
+              
+              // 处理关系数据，确保格式正确
+              if (contextData.context && Array.isArray(contextData.context)) {
+                this.entityRelationships = contextData.context.map(item => {
+                  // 确定关系方向
+                  const direction = 
+                    item.relationship.source_id === entityId ? 'outgoing' : 'incoming';
+                  
+                  return {
+                    id: item.relationship.id,
+                    type: item.relationship.type,
+                    direction: direction,
+                    target: item.related_entity
+                  };
+                });
+              } else {
+                console.warn('Context data format unexpected:', contextData);
+                this.entityRelationships = [];
+              }
+            } else {
+              console.warn('Failed to fetch context, falling back to mock data');
+              this.entityRelationships = this.getMockRelationships(entityId);
+            }
+          } catch (error) {
+            console.error('Error fetching entity context:', error);
+            this.entityRelationships = this.getMockRelationships(entityId);
+          }
+          
+          console.log('Final relationships list:', this.entityRelationships);
+          
         } catch (error) {
-          console.error('Error fetching relationships:', error);
-          this.entityRelationships = [];
+          console.error('Error fetching entity details:', error);
+          // 使用传入的实体作为备选
+          this.selectedEntity = entity;
+          this.entityRelationships = this.getMockRelationships(entityId);
         }
       },
       
