@@ -673,6 +673,7 @@
       
 
       // Update this method to explicitly log and ensure relationships are available for editing
+      // 编辑实体时初始化表单数据
       editEntity() {
         console.log('Edit entity:', this.selectedEntity);
         console.log('Current relationships before edit:', this.entityRelationships);
@@ -680,22 +681,25 @@
         this.isEditing = true;
         this.editingEntity = JSON.parse(JSON.stringify(this.selectedEntity));
 
-        // 确保properties是一个对象，即使数据库返回的是null或undefined
-        let entityProperties = this.selectedEntity.properties || {};
+        // 属性处理：确保获取到一个可用的JavaScript对象
+        let entityProperties = {};
         
-        // 如果properties是字符串（可能是JSON字符串），尝试解析
         if (this.selectedEntity.properties) {
           if (typeof this.selectedEntity.properties === 'string') {
             try {
               entityProperties = JSON.parse(this.selectedEntity.properties);
+              console.log('Parsed properties string to object:', entityProperties);
             } catch (e) {
               console.error('Error parsing properties string:', e);
               entityProperties = {};
             }
           } else if (typeof this.selectedEntity.properties === 'object') {
             entityProperties = {...this.selectedEntity.properties};
+            console.log('Properties object copied:', entityProperties);
           }
         }
+        
+        // 准备表单数据
         this.editFormData = {
           name: this.selectedEntity.name,
           type: this.selectedEntity.type,
@@ -719,7 +723,7 @@
         this.entityRelationships = this.getMockRelationships(this.selectedEntity.id);
         console.log('Refreshed relationships for editing:', this.entityRelationships);
         
-        // 新增：保存原始关系列表的副本，用于后续比较
+        // 保存原始关系列表的副本，用于后续比较
         this.originalRelationships = JSON.parse(JSON.stringify(this.entityRelationships));
         console.log('Saved original relationships:', this.originalRelationships);
       },
@@ -1271,21 +1275,23 @@
           alert('缺少实体ID，无法更新');
           return;
         }
-        // 打印修改前的属性，检查格式
-        console.log('Original properties:', this.editingEntity.properties);
-        console.log('Edited properties:', this.editFormData.properties);
-
+        
+        // 详细记录当前属性数据
+        console.log('Original properties:', JSON.stringify(this.editingEntity.properties));
+        console.log('Edited properties:', JSON.stringify(this.editFormData.properties));
+        
         // 确保properties是对象而不是字符串
         let properties = this.editFormData.properties;
         if (typeof properties === 'string') {
           try {
             properties = JSON.parse(properties);
+            console.log('Parsed properties from string:', properties);
           } catch (e) {
             console.error('Error parsing properties string:', e);
             properties = {}; // 防止错误，使用空对象
           }
         }
-  
+        
         // 准备更新的实体数据
         const updatedEntity = {
           ...this.editingEntity,
@@ -1298,7 +1304,7 @@
         console.log('Sending update request for entity:', updatedEntity);
         
         try {
-          // 首先更新实体
+          // 发送更新请求
           const response = await fetch(`/api/v1/entities/${this.editingEntity.id}`, {
             method: 'PUT',
             headers: {
@@ -1313,10 +1319,11 @@
             throw new Error(`实体更新失败: ${response.status} - ${errorText}`);
           }
           
+          // 处理返回数据
           const updatedEntityData = await response.json();
           console.log('Entity update successful, received data:', updatedEntityData);
-
-          // 重要：确保返回的数据包含properties并正确处理
+          
+          // 确保返回的数据包含properties并正确处理
           if (!updatedEntityData.properties) {
             updatedEntityData.properties = {};
             console.warn('Returned entity data does not contain properties, adding empty object');
@@ -1329,12 +1336,12 @@
               updatedEntityData.properties = {};
             }
           }
-                
-          // 处理关系
+          
+          // 处理关系更新
           console.log('Updating relationships:', this.entityRelationships);
           console.log('Original relationships:', this.originalRelationships);
           
-          // 新增：找出被删除的关系
+          // 找出被删除的关系
           const currentRelationshipIds = new Set(this.entityRelationships.map(rel => rel.id));
           const deletedRelationships = this.originalRelationships.filter(
             rel => !rel.id.startsWith('temp-') && !currentRelationshipIds.has(rel.id)
@@ -1378,7 +1385,7 @@
             return true; // 跳过现有关系
           });
           
-          // 新增：处理删除关系的请求
+          // 处理删除关系的请求
           const deletePromises = deletedRelationships.map(async rel => {
             const relationshipId = typeof rel.id === 'object' ? rel.id.id : rel.id;
             console.log(`Deleting relationship with ID: ${relationshipId}`);
@@ -1422,13 +1429,13 @@
           this.isEditing = false;
           this.editingEntity = null;
           
-          // 刷新数据以显示更新的关系
+          // 刷新图数据
           await this.fetchGraphData();
           
           // 重新选择实体以查看更新的数据
-        setTimeout(() => {
-          this.selectEntity(updatedEntityData);
-        }, 300);
+          setTimeout(() => {
+            this.selectEntity(updatedEntityData);
+          }, 300);
           
           // 显示成功消息
           alert('实体及关系更新成功');
@@ -1445,19 +1452,27 @@
 
       // 添加实体属性
       addEntityProperty() {
+        // 使用 nextTick 确保 DOM 已更新
         this.$nextTick(() => {
           const key = prompt('请输入属性名称:');
           if (key && key.trim()) {
+            // 记录当前属性对象状态
+            console.log('Current properties before adding:', JSON.stringify(this.editFormData.properties));
+            
             // 检查属性是否已存在
             if (this.editFormData.properties[key.trim()]) {
               alert(`属性 "${key.trim()}" 已存在！`);
               return;
             }
             
-            // 添加新属性
-            const updatedProperties = {...this.editFormData.properties};
+            // 创建一个新的属性对象，以确保响应式更新
+            const updatedProperties = { ...this.editFormData.properties };
             updatedProperties[key.trim()] = '';
+            
+            // 使用新对象替换原对象，确保Vue检测到变化
             this.editFormData.properties = updatedProperties;
+            
+            console.log('Updated properties after adding:', JSON.stringify(this.editFormData.properties));
           }
         });
       },
@@ -1465,6 +1480,9 @@
       editPropertyKey(oldKey) {
         const newKey = prompt('请输入新的属性名称:', oldKey);
         if (newKey && newKey.trim() && newKey.trim() !== oldKey) {
+          // 记录当前属性对象状态
+          console.log('Current properties before renaming key:', JSON.stringify(this.editFormData.properties));
+          
           // 检查新键名是否已存在
           if (this.editFormData.properties[newKey.trim()]) {
             alert(`属性 "${newKey.trim()}" 已存在！`);
@@ -1481,15 +1499,26 @@
             }
           }
           
+          // 使用新对象替换原对象
           this.editFormData.properties = updatedProperties;
+          
+          console.log('Updated properties after renaming key:', JSON.stringify(this.editFormData.properties));
         }
       },
 
       removeEntityProperty(key) {
         if (confirm(`确定要删除属性 "${key}" 吗?`)) {
-          const updatedProperties = {...this.editFormData.properties};
+          // 记录当前属性对象状态
+          console.log('Current properties before removing:', JSON.stringify(this.editFormData.properties));
+          
+          // 创建一个新的属性对象，不包含要删除的属性
+          const updatedProperties = { ...this.editFormData.properties };
           delete updatedProperties[key];
+          
+          // 使用新对象替换原对象
           this.editFormData.properties = updatedProperties;
+          
+          console.log('Updated properties after removing:', JSON.stringify(this.editFormData.properties));
         }
       },
 

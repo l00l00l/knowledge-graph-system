@@ -120,11 +120,11 @@ class Neo4jDatabase(DatabaseInterface[T]):
     async def read(self, id: UUID) -> Optional[T]:
         """读取实体或关系"""
         try:
-            # Convert the ID to string
+            # 确保ID是字符串
             entity_id = str(id)
             print(f"Reading entity with ID: {entity_id}")
             
-            # More flexible query that matches by string representation of ID
+            # 使用更灵活的查询语句，通过ID字符串表示匹配
             query = """
             MATCH (e)
             WHERE toString(e.id) = $id
@@ -139,27 +139,27 @@ class Neo4jDatabase(DatabaseInterface[T]):
                     print(f"Entity not found with ID: {entity_id}")
                     return None
                     
-                # Extract entity data
+                # 提取实体数据
                 entity_data = dict(record["e"])
                 entity_labels = record["labels"]
                 
-                # Convert JSON strings back to Python objects
-                for key, value in entity_data.items():
+                # 处理JSON字符串字段
+                for key, value in list(entity_data.items()):
                     if isinstance(value, str) and key == "properties":
                         try:
                             entity_data[key] = json.loads(value)
                             print(f"Successfully parsed properties: {entity_data[key]}")
                         except json.JSONDecodeError as e:
                             print(f"Error parsing properties: {e}")
-                            # Keep as string if can't parse
+                            # 如果解析失败，保持原样
                 
-                # Determine entity type from labels
+                # 确定实体类型
                 entity_type = next((label for label in entity_labels if label != "Entity"), "Entity")
                 entity_data["type"] = entity_type
                 
                 print(f"Found entity: {entity_data.get('name', 'Unnamed')} (Type: {entity_type})")
                 
-                # Return Entity object
+                # 返回实体对象
                 return Entity(**entity_data)
                     
         except Exception as e:
@@ -181,7 +181,7 @@ class Neo4jDatabase(DatabaseInterface[T]):
             # 特别处理properties字段
             if "properties" in entity_dict:
                 properties = entity_dict["properties"]
-                print(f"Original properties: {properties}")
+                print(f"Original properties before processing: {properties}")
                 
                 # 确保properties是字典类型
                 if not isinstance(properties, dict):
@@ -191,30 +191,46 @@ class Neo4jDatabase(DatabaseInterface[T]):
                             properties = json.loads(properties)
                             print(f"Parsed properties from string: {properties}")
                         else:
+                            # 如果不是字典也不是字符串，使用空字典
                             properties = {}
+                            print("Properties is neither dict nor string, using empty dict")
                     except Exception as e:
                         print(f"Error parsing properties: {e}")
                         properties = {}
                 
-                # 更新properties字段
-                entity_dict["properties"] = json.dumps(properties)
-                print(f"Serialized properties to JSON: {entity_dict['properties']}")
+                # 确保所有属性值都是可序列化的
+                clean_props = {}
+                for k, v in properties.items():
+                    if isinstance(v, (dict, list)):
+                        clean_props[k] = json.dumps(v)
+                    elif isinstance(v, UUID):
+                        clean_props[k] = str(v)
+                    else:
+                        clean_props[k] = v
+                
+                # 用处理后的properties替换原始properties
+                entity_dict["properties"] = json.dumps(clean_props)
+                print(f"Properties serialized to JSON: {entity_dict['properties']}")
             
-            # Convert other complex types to JSON strings
-            for key, value in entity_dict.items():
+            # 处理其他复杂类型
+            for key, value in list(entity_dict.items()):
                 if key != "properties" and isinstance(value, (dict, list)):
                     entity_dict[key] = json.dumps(value)
                 elif isinstance(value, UUID):
                     entity_dict[key] = str(value)
             
-            # Update node properties
+            # 打印即将发送到数据库的entity_dict
+            print(f"Entity dict ready for database update: {entity_dict}")
+            
+            # 更新节点属性
             query = """
             MATCH (e)
             WHERE toString(e.id) = $id
             SET e = $properties
+            RETURN e
             """
             
-            # Add or update entity type label
+            # 更新或添加实体类型标签
             type_query = """
             MATCH (e)
             WHERE toString(e.id) = $id
@@ -225,17 +241,54 @@ class Neo4jDatabase(DatabaseInterface[T]):
             """
             
             async with self.driver.session(database=self.database) as session:
-                # Update properties
-                await session.run(query, id=entity_id, properties=entity_dict)
+                # 执行属性更新
+                result = await session.run(query, id=entity_id, properties=entity_dict)
+                record = await result.single()
+                if record:
+                    print(f"Successfully updated entity properties")
+                else:
+                    print(f"Warning: No record returned when updating entity properties")
                 
-                # Update type label
+                # 执行类型标签更新
                 if "type" in entity_dict and entity_dict["type"]:
                     try:
                         await session.run(type_query, id=entity_id, type=entity_dict["type"])
+                        print(f"Successfully updated entity type label to {entity_dict['type']}")
                     except Exception as type_error:
                         print(f"Error updating entity type: {type_error}")
                 
-                # Return the updated entity
+                # 返回更新后的对象
+                # 先从数据库读取最新数据
+                read_query = """
+                MATCH (e)
+                WHERE toString(e.id) = $id
+                RETURN e, labels(e) as labels
+                """
+                
+                read_result = await session.run(read_query, id=entity_id)
+                read_record = await read_result.single()
+                
+                if read_record:
+                    # 处理读取的实体数据
+                    updated_entity_data = dict(read_record["e"])
+                    entity_labels = read_record["labels"]
+                    
+                    # 处理properties字段
+                    if "properties" in updated_entity_data and isinstance(updated_entity_data["properties"], str):
+                        try:
+                            updated_entity_data["properties"] = json.loads(updated_entity_data["properties"])
+                            print(f"Successfully parsed properties from updated entity: {updated_entity_data['properties']}")
+                        except json.JSONDecodeError as e:
+                            print(f"Error parsing properties from updated entity: {e}")
+                    
+                    # 确定实体类型
+                    entity_type = next((label for label in entity_labels if label != "Entity"), "Entity")
+                    updated_entity_data["type"] = entity_type
+                    
+                    # 创建更新后的对象
+                    return type(obj)(**updated_entity_data)
+                
+                # 如果读取失败，返回原对象
                 return obj
                     
         except Exception as e:
