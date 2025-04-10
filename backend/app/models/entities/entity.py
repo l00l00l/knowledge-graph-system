@@ -16,6 +16,7 @@ class Entity(TimeStampMixin, VersionMixin, SourceMixin):
     importance: Optional[int] = Field(default=None, description="实体重要度(1-5)")
     understanding_level: Optional[int] = Field(default=None, description="理解程度(1-5)")
     personal_notes: Optional[str] = Field(default=None, description="个人笔记")
+    category: Optional[str] = Field(default=None, description="实体分类(基础类型、领域类型、个人类型)")
     
     class Config:
         schema_extra = {

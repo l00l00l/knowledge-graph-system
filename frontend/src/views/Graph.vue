@@ -740,6 +740,24 @@
         this.isEditing = true;
         this.editingEntity = JSON.parse(JSON.stringify(this.selectedEntity));
 
+
+        // 设置分类选择器
+        if (this.selectedEntity.category) {
+          // 如果实体已有分类信息，直接使用
+          this.selectedEntityTypeCategory = this.selectedEntity.category;
+          console.log('Loading existing category:', this.selectedEntityTypeCategory);
+        } else {
+          // 如果实体没有分类信息，根据类型推断
+          this.selectedEntityTypeCategory = '';
+          if (this.selectedEntity.type && this.entityTypes.length > 0) {
+            const entityType = this.entityTypes.find(t => t.type_code === this.selectedEntity.type);
+            if (entityType) {
+              this.selectedEntityTypeCategory = entityType.category;
+              console.log('Inferred category from type:', this.selectedEntityTypeCategory);
+            }
+          }
+        }
+
         // 属性处理：确保获取到一个可用的JavaScript对象
         let entityProperties = {};
         
@@ -1357,7 +1375,8 @@
           name: this.editFormData.name,
           type: this.editFormData.type,
           description: this.editFormData.description,
-          properties: properties
+          properties: properties,
+          category: this.selectedEntityTypeCategory
         };
         
         console.log('Sending update request for entity:', updatedEntity);
