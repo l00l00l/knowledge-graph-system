@@ -1,5 +1,5 @@
 # 文件: app/db/neo4j_db.py
-import datetime
+from datetime import datetime  # 直接导入类
 from typing import Dict, Any, Optional, List, Generic, TypeVar, Type
 from uuid import UUID
 import json
@@ -263,8 +263,40 @@ class Neo4jDatabase(DatabaseInterface[T]):
                 # 执行类型标签更新
                 if "type" in entity_dict and entity_dict["type"]:
                     try:
-                        await session.run(type_query, id=entity_id, type=entity_dict["type"])
-                        print(f"Successfully updated entity type label to {entity_dict['type']}")
+                        # 首先获取当前节点的所有标签
+                        labels_query = """
+                        MATCH (e)
+                        WHERE toString(e.id) = $id
+                        RETURN labels(e) AS labels
+                        """
+                        
+                        labels_result = await session.run(labels_query, id=entity_id)
+                        labels_record = await labels_result.single()
+                        if labels_record:
+                            current_labels = labels_record["labels"]
+                            
+                            # 移除所有非"Entity"且非新类型的标签
+                            for label in current_labels:
+                                if label != "Entity" and label != entity_dict["type"]:
+                                    remove_query = f"""
+                                    MATCH (e)
+                                    WHERE toString(e.id) = $id
+                                    REMOVE e:{label}
+                                    """
+                                    await session.run(remove_query, id=entity_id)
+                                    print(f"Removed old type label: {label}")
+                        
+                        # 添加新类型标签
+                        add_label_query = f"""
+                        MATCH (e)
+                        WHERE toString(e.id) = $id
+                        SET e:{entity_dict["type"]}
+                        RETURN e
+                        """
+                        
+                        await session.run(add_label_query, id=entity_id)
+                        print(f"Added new type label: {entity_dict['type']}")
+                        
                     except Exception as type_error:
                         print(f"Error updating entity type: {type_error}")
                 
