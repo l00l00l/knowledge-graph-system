@@ -277,6 +277,7 @@ class Neo4jDatabase(DatabaseInterface[T]):
             import traceback
             traceback.print_exc()
             return None
+    
     async def delete(self, id: UUID) -> bool:
         """删除实体或关系"""
         try:
