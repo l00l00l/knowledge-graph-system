@@ -78,6 +78,15 @@ class Neo4jDatabase(DatabaseInterface[T]):
         """创建关系边"""
         # 将Pydantic模型转为字典
         rel_dict = relationship.dict()
+        
+        # 提取关键信息，确保source_id和target_id正确设置
+        source_id = rel_dict.get("source_id")
+        target_id = rel_dict.get("target_id")
+        
+        if not source_id or not target_id:
+            raise ValueError("Relationship must have both source_id and target_id")
+        
+        # 准备关系属性，排除特定字段
         props = {k: v for k, v in rel_dict.items() 
                 if v is not None and k not in ('type', 'source_id', 'target_id')}
         
@@ -88,6 +97,17 @@ class Neo4jDatabase(DatabaseInterface[T]):
             # 添加UUID转换
             elif isinstance(v, UUID):
                 props[k] = str(v)
+            # 添加datetime转换
+            elif k in ["created_at", "updated_at"] and hasattr(v, "isoformat"):
+                props[k] = v.isoformat()
+        
+        # 确保created_at和updated_at字段存在
+        from datetime import datetime
+        now_str = datetime.now().isoformat()
+        if "created_at" not in props:
+            props["created_at"] = now_str
+        if "updated_at" not in props:
+            props["updated_at"] = now_str
         
         # 修正Cypher查询 - 使用正确的参数语法
         query = """
@@ -101,8 +121,8 @@ class Neo4jDatabase(DatabaseInterface[T]):
         """ % relationship.type
         
         params = {
-            "source_id": str(relationship.source_id),
-            "target_id": str(relationship.target_id),
+            "source_id": str(source_id),
+            "target_id": str(target_id),
             "props": props
         }
         

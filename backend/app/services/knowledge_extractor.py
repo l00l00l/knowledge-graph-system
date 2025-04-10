@@ -92,16 +92,7 @@ class SpacyNERExtractor:
         return entities
     
     async def extract_relationships(self, document: SourceDocument, entities: List[Entity], text_content: str) -> List[Relationship]:
-        """从文本中提取实体间的关系
-        
-        Args:
-            document: 源文档
-            entities: 已提取的实体
-            text_content: 文档文本内容
-            
-        Returns:
-            提取的关系列表
-        """
+        """从文本中提取实体间的关系"""
         print(f"Extracting relationships from document: {document.title}")
         
         # 如果实体少于2个，无法建立关系
@@ -136,7 +127,7 @@ class SpacyNERExtractor:
                         relation_exists = False
                         for rel in relationships:
                             if (rel.source_id == sent_entities[i].id and rel.target_id == sent_entities[j].id) or \
-                               (rel.source_id == sent_entities[j].id and rel.target_id == sent_entities[i].id):
+                            (rel.source_id == sent_entities[j].id and rel.target_id == sent_entities[i].id):
                                 relation_exists = True
                                 break
                         
@@ -157,17 +148,14 @@ class SpacyNERExtractor:
                                 },
                                 bidirectional=False,
                                 certainty=0.7,  # 共现关系的确定性较低
-                                # 修复：使用文档来源信息
-                                source_type=document.type,
-                                extraction_method="co_occurrence",
-                                confidence=0.7,
+                                confidence=0.7
                             )
                             
-                            # 手动设置source_id属性，避免构造函数中的命名冲突
-                            document_id = document.id
-                            if isinstance(document_id, UUID):
-                                document_id = str(document_id)
-                            setattr(relationship, "source_id", document_id)
+                            # 修复: 添加创建和更新时间
+                            from datetime import datetime
+                            now = datetime.now()
+                            relationship.created_at = now
+                            relationship.updated_at = now
                             
                             # 添加到结果
                             relationships.append(relationship)
