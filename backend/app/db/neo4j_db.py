@@ -146,13 +146,29 @@ class Neo4jDatabase(DatabaseInterface[T]):
                 
                 # 处理JSON字符串字段
                 for key, value in list(entity_data.items()):
-                    if isinstance(value, str) and key == "properties":
-                        try:
-                            entity_data[key] = json.loads(value)
-                            print(f"Successfully parsed properties: {entity_data[key]}")
-                        except json.JSONDecodeError as e:
-                            print(f"Error parsing properties: {e}")
-                            # 如果解析失败，保持原样
+                    if isinstance(value, str):
+                        if key == "properties":
+                            try:
+                                entity_data[key] = json.loads(value)
+                                print(f"Successfully parsed properties: {entity_data[key]}")
+                            except json.JSONDecodeError as e:
+                                print(f"Error parsing properties: {e}")
+                                # 如果解析失败，保持原样
+                        elif key == "tags":
+                            try:
+                                entity_data[key] = json.loads(value)
+                                print(f"Successfully parsed tags: {entity_data[key]}")
+                            except json.JSONDecodeError as e:
+                                print(f"Error parsing tags: {e}")
+                                # 如果解析失败，设置为空列表
+                                entity_data[key] = []
+                
+                # 确保tags字段是列表
+                if "tags" not in entity_data or entity_data["tags"] is None:
+                    entity_data["tags"] = []
+                elif not isinstance(entity_data["tags"], list):
+                    entity_data["tags"] = []
+                    print(f"Corrected tags field to empty list")
                 
                 # 确定实体类型
                 entity_type = next((label for label in entity_labels if label != "Entity"), "Entity")

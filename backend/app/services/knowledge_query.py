@@ -250,3 +250,22 @@ class KnowledgeQueryService(QueryInterface):
         
         # 创建Relationship对象
         return Relationship(**props)
+    async def suggest_related_knowledge(self, entity_ids: List[UUID]) -> Dict[str, Any]:
+        """推荐相关知识"""
+        suggestions = []
+        
+        # 简单实现：基于已有实体的类型和关系推荐相关实体
+        for entity_id in entity_ids:
+            # 获取与当前实体类型相同的其他实体
+            entity = await self.db.read(entity_id)
+            if entity:
+                similar_entities = await self.find_entities({"type": entity.type})
+                # 排除当前实体
+                similar_entities = [e for e in similar_entities if e.id != entity_id]
+                # 取前5个
+                suggestions.extend(similar_entities[:5])
+        
+        return {
+            "suggested_entities": suggestions,
+            "message": f"已基于 {len(entity_ids)} 个实体生成 {len(suggestions)} 个建议"
+        }
