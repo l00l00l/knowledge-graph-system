@@ -91,10 +91,12 @@ class KnowledgeQueryService(QueryInterface):
     
     async def get_entity_context(self, entity_id: UUID) -> List[Dict[str, Any]]:
         """获取实体的上下文信息：相关实体和关系"""
-        # 构建Cypher查询，获取与实体直接相关的其他实体和关系
+        # 修改查询语句，使用相同的ID匹配方式
         cypher_query = """
-        MATCH (e:Entity {id: $entity_id})-[r]-(related)
-        RETURN e, r, related
+        MATCH (e)
+        WHERE toString(e.id) = $entity_id
+        MATCH (e)-[r]-(related)
+        RETURN r, related
         LIMIT 100
         """
         

@@ -44,6 +44,13 @@ class Neo4jDatabase(DatabaseInterface[T]):
         entity_dict = entity.dict()
         #props = {k: v for k, v in entity_dict.items() if v is not None and k != 'type'}
         props = {k: v for k, v in entity_dict.items() if v is not None}
+
+        # 明确设置时间戳为ISO格式字符串
+        from datetime import datetime
+        current_time = datetime.now().isoformat()
+        
+        props['created_at'] = current_time
+        props['updated_at'] = current_time
         
         # 将复杂类型转换为JSON字符串
         for k, v in props.items():
@@ -164,6 +171,15 @@ class Neo4jDatabase(DatabaseInterface[T]):
                 # 提取实体数据
                 entity_data = dict(record["e"])
                 entity_labels = record["labels"]
+
+                from datetime import datetime
+                current_time = datetime.now()
+                # 确保时间戳字段存在且类型正确
+                if 'created_at' not in entity_data or entity_data['created_at'] is None:
+                    entity_data['created_at'] = current_time
+                
+                if 'updated_at' not in entity_data or entity_data['updated_at'] is None:
+                    entity_data['updated_at'] = current_time
                 
                 # 处理JSON字符串字段
                 for key, value in list(entity_data.items()):

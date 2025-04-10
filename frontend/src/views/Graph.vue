@@ -95,123 +95,7 @@
         </div>
         <!-- Replace the current edit-modal with this improved version -->
         
-        <!-- Place this at the root level of your template, outside the detail-panel -->
-        <div v-if="showAddRelationship" class="add-relationship-modal">
-          <div class="add-relationship-content">
-            <div class="modal-header">
-              <h3>添加关系</h3>
-              <button @click="showAddRelationship = false" class="close-btn">
-                <i class="fas fa-times"></i>
-              </button>
-            </div>
-            
-            <div class="modal-body">
-              <div class="form-group">
-                <label>关系方向</label>
-                <div class="direction-selector">
-                  <label class="radio-option">
-                    <input type="radio" v-model="newRelationship.direction" value="outgoing">
-                    <span>出发 ({{ editFormData.name }} → 目标实体)</span>
-                  </label>
-                  <label class="radio-option">
-                    <input type="radio" v-model="newRelationship.direction" value="incoming">
-                    <span>接收 (目标实体 → {{ editFormData.name }})</span>
-                  </label>
-                </div>
-              </div>
-              
-              <!-- 在添加关系对话框中的类型选择器部分 -->
-              <div class="form-group">
-                <label>关系类型</label>
-                <div class="type-selector">
-                  <div>
-                    <span class="type-selector-label">分类</span>
-                    <select v-model="selectedRelationshipTypeCategory" class="category-select">
-                      <option value="">所有分类</option>
-                      <option v-for="category in relationshipTypeCategories" :key="category">
-                        {{ category }}
-                      </option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <span class="type-selector-label">关系类型</span>
-                    <select v-model="newRelationship.type" class="type-select">
-                      <option value="">请选择关系类型</option>
-                      <option v-for="type in filteredRelationshipTypes" :key="type.type_code" :value="type.type_code">
-                        {{ type.type_name }}
-                      </option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-              <!-- Replace the entity search section in your relationship dialog -->
-              <div class="form-group entity-search-container">
-                <label>目标实体</label>
-                <div class="entity-search-wrapper">
-                  <input 
-                    type="text" 
-                    v-model="targetEntitySearch" 
-                    @keyup.enter="searchTargetEntities"
-                    @input="handleInputChange"
-                    placeholder="搜索实体..." 
-                    class="form-input search-input"
-                  >
-                  <button type="button" v-if="isSearching" class="search-status searching">
-                    <i class="fas fa-spinner fa-spin"></i>
-                  </button>
-                  <button type="button" v-else-if="targetEntitySearch" class="search-status" @click="searchTargetEntities">
-                    <i class="fas fa-search"></i>
-                  </button>
-                </div>
-                
-                <!-- Improved search results dropdown -->
-                <div v-if="searchResults.length > 0" class="search-results-dropdown">
-                  <div 
-                    v-for="entity in searchResults" 
-                    :key="entity.id" 
-                    class="result-item"
-                    @click="selectTargetEntity(entity)"
-                  >
-                    <div class="result-name">{{ entity.name }}</div>
-                    <div class="result-type">{{ getEntityTypeName(entity.type) }}</div>
-                  </div>
-                </div>
-                
-                <!-- No results message (improved styling) -->
-                <div v-if="searchResults.length === 0 && targetEntitySearch.length >= 1 && !isSearching" class="no-results-message">
-                  <i class="fas fa-info-circle"></i> 未找到匹配的实体
-                </div>
-                
-                <!-- Improved selected entity display -->
-                <div v-if="newRelationship.targetEntity" class="selected-entity">
-                  <div class="entity-badge" :class="newRelationship.targetEntity.type">
-                    <i :class="getEntityTypeIcon(newRelationship.targetEntity.type)"></i>
-                  </div>
-                  <div class="entity-details">
-                    <div class="entity-name">{{ newRelationship.targetEntity.name }}</div>
-                    <div class="entity-type">{{ getEntityTypeName(newRelationship.targetEntity.type) }}</div>
-                  </div>
-                  <button @click="newRelationship.targetEntity = null" class="remove-entity-btn">
-                    <i class="fas fa-times"></i>
-                  </button>
-                </div>
-              </div>
-              
-            </div>
-            
-            <div class="modal-footer">
-              <button @click="showAddRelationship = false" class="btn cancel-btn">取消</button>
-              <button 
-                @click="addRelationship" 
-                class="btn save-btn" 
-                :disabled="!isNewRelationshipValid"
-              >
-                添加
-              </button>
-            </div>
-          </div>
-        </div>
+        
       </div>
       <!-- Entity Edit Form Modal -->
       
@@ -361,6 +245,123 @@
         <button @click="deleteEntity" class="delete-btn" :disabled="isDeleting">
           <i :class="isDeleting ? 'fas fa-spinner fa-spin' : 'fas fa-trash'"></i>
           {{ isDeleting ? '删除中...' : '删除' }}
+        </button>
+      </div>
+    </div>
+  </div>
+  <!-- Place this at the root level of your template, outside the detail-panel -->
+  <div v-if="showAddRelationship" class="add-relationship-modal">
+    <div class="add-relationship-content">
+      <div class="modal-header">
+        <h3>添加关系</h3>
+        <button @click="showAddRelationship = false" class="close-btn">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="form-group">
+          <label>关系方向</label>
+          <div class="direction-selector">
+            <label class="radio-option">
+              <input type="radio" v-model="newRelationship.direction" value="outgoing">
+              <span>出发 ({{ editFormData.name }} → 目标实体)</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" v-model="newRelationship.direction" value="incoming">
+              <span>接收 (目标实体 → {{ editFormData.name }})</span>
+            </label>
+          </div>
+        </div>
+        
+        <!-- 在添加关系对话框中的类型选择器部分 -->
+        <div class="form-group">
+          <label>关系类型</label>
+          <div class="type-selector">
+            <div>
+              <span class="type-selector-label">分类</span>
+              <select v-model="selectedRelationshipTypeCategory" class="category-select">
+                <option value="">所有分类</option>
+                <option v-for="category in relationshipTypeCategories" :key="category">
+                  {{ category }}
+                </option>
+              </select>
+            </div>
+            
+            <div>
+              <span class="type-selector-label">关系类型</span>
+              <select v-model="newRelationship.type" class="type-select">
+                <option value="">请选择关系类型</option>
+                <option v-for="type in filteredRelationshipTypes" :key="type.type_code" :value="type.type_code">
+                  {{ type.type_name }}
+                </option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <!-- Replace the entity search section in your relationship dialog -->
+        <div class="form-group entity-search-container">
+          <label>目标实体</label>
+          <div class="entity-search-wrapper">
+            <input 
+              type="text" 
+              v-model="targetEntitySearch" 
+              @keyup.enter="searchTargetEntities"
+              @input="handleInputChange"
+              placeholder="搜索实体..." 
+              class="form-input search-input"
+            >
+            <button type="button" v-if="isSearching" class="search-status searching">
+              <i class="fas fa-spinner fa-spin"></i>
+            </button>
+            <button type="button" v-else-if="targetEntitySearch" class="search-status" @click="searchTargetEntities">
+              <i class="fas fa-search"></i>
+            </button>
+          </div>
+          
+          <!-- Improved search results dropdown -->
+          <div v-if="searchResults.length > 0" class="search-results-dropdown">
+            <div 
+              v-for="entity in searchResults" 
+              :key="entity.id" 
+              class="result-item"
+              @click="selectTargetEntity(entity)"
+            >
+              <div class="result-name">{{ entity.name }}</div>
+              <div class="result-type">{{ getEntityTypeName(entity.type) }}</div>
+            </div>
+          </div>
+          
+          <!-- No results message (improved styling) -->
+          <div v-if="searchResults.length === 0 && targetEntitySearch.length >= 1 && !isSearching" class="no-results-message">
+            <i class="fas fa-info-circle"></i> 未找到匹配的实体
+          </div>
+          
+          <!-- Improved selected entity display -->
+          <div v-if="newRelationship.targetEntity" class="selected-entity">
+            <div class="entity-badge" :class="newRelationship.targetEntity.type">
+              <i :class="getEntityTypeIcon(newRelationship.targetEntity.type)"></i>
+            </div>
+            <div class="entity-details">
+              <div class="entity-name">{{ newRelationship.targetEntity.name }}</div>
+              <div class="entity-type">{{ getEntityTypeName(newRelationship.targetEntity.type) }}</div>
+            </div>
+            <button @click="newRelationship.targetEntity = null" class="remove-entity-btn">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        </div>
+        
+      </div>
+      
+      <div class="modal-footer">
+        <button @click="showAddRelationship = false" class="btn cancel-btn">取消</button>
+        <button 
+          @click="addRelationship" 
+          class="btn save-btn" 
+          :disabled="!isNewRelationshipValid"
+        >
+          添加
         </button>
       </div>
     </div>
