@@ -94,133 +94,7 @@
           </div>
         </div>
         <!-- Replace the current edit-modal with this improved version -->
-        <div v-if="isEditing" class="edit-modal">
-          <div class="edit-modal-content">
-            <div class="edit-modal-header">
-              <h3>{{ isCreatingMode ? '新增实体' : '编辑实体' }}</h3>
-              <button @click="cancelEdit" class="close-btn">
-                <i class="fas fa-times"></i>
-              </button>
-            </div>
-            
-            <div class="edit-modal-body">
-              <div class="form-section">
-                <h4 class="section-title">基本信息</h4>
-                <div class="form-group">
-                  <label>名称</label>
-                  <input type="text" v-model="editFormData.name" class="form-input">
-                </div>
-                
-                <!-- 在edit-modal-body中的实体类型选择器部分 -->
-                <div class="form-group">
-                  <label>类型</label>
-                  <div class="type-selector">
-                    <div>
-                      <span class="type-selector-label">分类</span>
-                      <select v-model="selectedEntityTypeCategory" class="category-select">
-                        <option value="">所有分类</option>
-                        <option v-for="category in entityTypeCategories" :key="category">
-                          {{ category }}
-                        </option>
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <span class="type-selector-label">具体类型</span>
-                      <select v-model="editFormData.type" class="type-select">
-                        <option value="">请选择类型</option>
-                        <option v-for="type in filteredEntityTypes" :key="type.type_code" :value="type.type_code">
-                          {{ type.type_name }}
-                        </option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                
-                <div class="form-group">
-                  <label>描述</label>
-                  <textarea v-model="editFormData.description" class="form-input" rows="3"></textarea>
-                </div>
-              </div>
-              
-              <!-- Replace the edit form "Properties" section with this improved version -->
-              <div class="form-section">
-                <h4 class="section-title">属性</h4>
-                <div class="property-actions">
-                  <button @click="addEntityProperty" class="add-property-btn">
-                    <i class="fas fa-plus"></i> 添加属性
-                  </button>
-                </div>
-                
-                <div v-if="Object.keys(editFormData.properties).length === 0" class="no-data-message">
-                  <i class="fas fa-info-circle"></i> 暂无属性数据
-                </div>
-                
-                <div v-else class="properties-list">
-                  <div v-for="(value, key) in editFormData.properties" :key="key" class="property-edit-row">
-                    <div class="property-key" @click="editPropertyKey(key)" title="点击修改属性名">
-                      {{ key }}:
-                    </div>
-                    <div class="property-value-container">
-                      <input 
-                        type="text" 
-                        v-model="editFormData.properties[key]" 
-                        class="property-value-input"
-                        :placeholder="getPropertyPlaceholder(key)"
-                      >
-                    </div>
-                    <div class="property-actions">
-                      <button @click="removeEntityProperty(key)" class="remove-property-btn" title="删除属性">
-                        <i class="fas fa-trash"></i>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                
-                <div class="tips-section">
-                  <p><i class="fas fa-lightbulb"></i> 提示：点击属性名可修改属性键名</p>
-                </div>
-              </div>
-
-              <!-- Similarly update the "Relationships" section -->
-              <div class="form-section">
-                <h4 class="section-title">关系</h4>
-                <button @click="showAddRelationshipDialog" class="add-relationship-btn">
-                  <i class="fas fa-plus"></i> 添加关系
-                </button>
-                
-                <div v-if="entityRelationships.length === 0" class="no-data-message">
-                  暂无关系数据
-                </div>
-                
-                <div v-else class="relationships-list">
-                  <div v-for="(rel, index) in entityRelationships" :key="index" class="relationship-edit-row">
-                    <div class="relationship-direction">
-                      <i :class="rel.direction === 'outgoing' ? 'fas fa-arrow-right' : 'fas fa-arrow-left'"></i>
-                    </div>
-                    <div class="relationship-type">{{ getRelationshipTypeName(rel.type) }}</div>
-                    <div class="related-entity">{{ rel.target.name }}</div>
-                    <button @click="removeRelationship(index)" class="remove-property-btn">
-                      <i class="fas fa-trash"></i>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div class="edit-modal-footer">
-              <div class="left-actions">
-                <button @click="confirmDeleteEntity" class="delete-btn">
-                  <i class="fas fa-trash"></i> 删除实体
-                </button>
-              </div>
-              <div class="right-actions">
-                <button @click="cancelEdit" class="btn cancel-btn">取消</button>
-                <button @click="saveEntityChanges" class="btn save-btn">保存</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        
         <!-- Place this at the root level of your template, outside the detail-panel -->
         <div v-if="showAddRelationship" class="add-relationship-modal">
           <div class="add-relationship-content">
@@ -344,6 +218,133 @@
       <button class="close-detail" @click="clearSelection">
         <i class="fas fa-times"></i>
       </button>
+    </div>
+    <div v-if="isEditing" class="edit-modal">
+      <div class="edit-modal-content">
+        <div class="edit-modal-header">
+          <h3>{{ isCreatingMode ? '新增实体' : '编辑实体' }}</h3>
+          <button @click="cancelEdit" class="close-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div class="edit-modal-body">
+          <div class="form-section">
+            <h4 class="section-title">基本信息</h4>
+            <div class="form-group">
+              <label>名称</label>
+              <input type="text" v-model="editFormData.name" class="form-input">
+            </div>
+            
+            <!-- 在edit-modal-body中的实体类型选择器部分 -->
+            <div class="form-group">
+              <label>类型</label>
+              <div class="type-selector">
+                <div>
+                  <span class="type-selector-label">分类</span>
+                  <select v-model="selectedEntityTypeCategory" class="category-select">
+                    <option value="">所有分类</option>
+                    <option v-for="category in entityTypeCategories" :key="category">
+                      {{ category }}
+                    </option>
+                  </select>
+                </div>
+                
+                <div>
+                  <span class="type-selector-label">具体类型</span>
+                  <select v-model="editFormData.type" class="type-select">
+                    <option value="">请选择类型</option>
+                    <option v-for="type in filteredEntityTypes" :key="type.type_code" :value="type.type_code">
+                      {{ type.type_name }}
+                    </option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label>描述</label>
+              <textarea v-model="editFormData.description" class="form-input" rows="3"></textarea>
+            </div>
+          </div>
+          
+          <!-- Replace the edit form "Properties" section with this improved version -->
+          <div class="form-section">
+            <h4 class="section-title">属性</h4>
+            <div class="property-actions">
+              <button @click="addEntityProperty" class="add-property-btn">
+                <i class="fas fa-plus"></i> 添加属性
+              </button>
+            </div>
+            
+            <div v-if="Object.keys(editFormData.properties).length === 0" class="no-data-message">
+              <i class="fas fa-info-circle"></i> 暂无属性数据
+            </div>
+            
+            <div v-else class="properties-list">
+              <div v-for="(value, key) in editFormData.properties" :key="key" class="property-edit-row">
+                <div class="property-key" @click="editPropertyKey(key)" title="点击修改属性名">
+                  {{ key }}:
+                </div>
+                <div class="property-value-container">
+                  <input 
+                    type="text" 
+                    v-model="editFormData.properties[key]" 
+                    class="property-value-input"
+                    :placeholder="getPropertyPlaceholder(key)"
+                  >
+                </div>
+                <div class="property-actions">
+                  <button @click="removeEntityProperty(key)" class="remove-property-btn" title="删除属性">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div class="tips-section">
+              <p><i class="fas fa-lightbulb"></i> 提示：点击属性名可修改属性键名</p>
+            </div>
+          </div>
+
+          <!-- Similarly update the "Relationships" section -->
+          <div class="form-section">
+            <h4 class="section-title">关系</h4>
+            <button @click="showAddRelationshipDialog" class="add-relationship-btn">
+              <i class="fas fa-plus"></i> 添加关系
+            </button>
+            
+            <div v-if="entityRelationships.length === 0" class="no-data-message">
+              暂无关系数据
+            </div>
+            
+            <div v-else class="relationships-list">
+              <div v-for="(rel, index) in entityRelationships" :key="index" class="relationship-edit-row">
+                <div class="relationship-direction">
+                  <i :class="rel.direction === 'outgoing' ? 'fas fa-arrow-right' : 'fas fa-arrow-left'"></i>
+                </div>
+                <div class="relationship-type">{{ getRelationshipTypeName(rel.type) }}</div>
+                <div class="related-entity">{{ rel.target.name }}</div>
+                <button @click="removeRelationship(index)" class="remove-property-btn">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="edit-modal-footer">
+          <div class="left-actions">
+            <button @click="confirmDeleteEntity" class="delete-btn">
+              <i class="fas fa-trash"></i> 删除实体
+            </button>
+          </div>
+          <div class="right-actions">
+            <button @click="cancelEdit" class="btn cancel-btn">取消</button>
+            <button @click="saveEntityChanges" class="btn save-btn">保存</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <!-- 删除确认对话框 -->
@@ -602,32 +603,40 @@
         
         try {
           // 直接从API获取最新的实体详情
-          const response = await fetch(`/api/v1/entities/${entityId}`);
-          
-          if (!response.ok) {
-            throw new Error(`获取实体详情失败: ${response.status}`);
+          let selectedEntityData = {...entity};
+    
+          // 尝试从API获取最新实体数据
+          try {
+            const response = await fetch(`/api/v1/entities/${entityId}`);
+            
+            if (response.ok) {
+              // 获取完整的实体数据
+              const fullEntityData = await response.json();
+              console.log('Retrieved full entity data:', fullEntityData);
+              selectedEntityData = fullEntityData;
+            } else {
+              console.warn(`获取实体详情失败，使用本地数据: ${response.status}`);
+            }
+          } catch (apiError) {
+            console.error('API请求错误:', apiError);
           }
           
-          // 获取完整的实体数据
-          const fullEntityData = await response.json();
-          console.log('Retrieved full entity data:', fullEntityData);
-          
           // 关键修复：确保properties是对象而不是字符串
-          if (fullEntityData.properties) {
-            if (typeof fullEntityData.properties === 'string') {
+          if (selectedEntityData.properties) {
+            if (typeof selectedEntityData.properties === 'string') {
               try {
-                fullEntityData.properties = JSON.parse(fullEntityData.properties);
+                selectedEntityData.properties = JSON.parse(selectedEntityData.properties);
               } catch (e) {
                 console.error('Error parsing properties:', e);
-                fullEntityData.properties = {};
+                selectedEntityData.properties = {};
               }
             }
           } else {
-            fullEntityData.properties = {};
+            selectedEntityData.properties = {};
           }
           
           // 更新选中的实体
-          this.selectedEntity = fullEntityData;
+          this.selectedEntity = selectedEntityData;
           
           // 获取实体的关系数据 - 从API获取上下文而不是使用本地方法
           try {
@@ -1383,6 +1392,28 @@
         this.isEditing = true;
         this.isCreatingMode = true; // 添加这个标志，表示是创建而非编辑
       },
+      // 辅助函数，确保properties是对象而非字符串
+      ensurePropertiesObject(entity) {
+        if (!entity) return entity;
+        
+        const entityCopy = {...entity};
+        
+        if (entityCopy.properties) {
+          if (typeof entityCopy.properties === 'string') {
+            try {
+              entityCopy.properties = JSON.parse(entityCopy.properties);
+              console.log('Successfully parsed properties string to object:', entityCopy.properties);
+            } catch (e) {
+              console.error('Error parsing properties string:', e);
+              entityCopy.properties = {};
+            }
+          }
+        } else {
+          entityCopy.properties = {};
+        }
+        
+        return entityCopy;
+      },
       async saveEntityChanges() {
         console.log('Saving entity changes');
         
@@ -1416,22 +1447,31 @@
         };
         
         try {
-          let response;
-          let successMessage;
+          let response = null;
+          let successMessage = '';
           
           if (this.isCreatingMode) {
-            // 创建新实体
+            // 创建新实体 - 添加更详细的错误日志
             console.log('Creating new entity:', entityData);
             
-            response = await fetch('/api/v1/entities/', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(entityData)
-            });
-            
-            successMessage = '实体创建成功';
+            try {
+              response = await fetch('/api/v1/entities/', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(entityData)
+              });
+              
+              if (!response) {
+                throw new Error('服务器未返回响应');
+              }
+              
+              successMessage = '实体创建成功';
+            } catch (fetchError) {
+              console.error('Fetch error during entity creation:', fetchError);
+              throw new Error(`网络请求失败: ${fetchError.message}`);
+            }
           } else {
             // 更新现有实体
             console.log('Updating entity:', this.editingEntity.id);
@@ -1512,13 +1552,19 @@
           
           // 如果是新创建的实体，选中它以显示详情
           if (this.isCreatingMode) {
-            // 找到新创建的实体
-            const createdNode = this.nodes.find(n => n.id === savedEntity.id);
-            if (createdNode) {
-              setTimeout(() => {
+            // 直接使用保存后返回的实体数据
+            setTimeout(() => {
+              const createdNode = this.nodes.find(n => n.id === savedEntity.id);
+              if (createdNode) {
+                console.log('Found newly created node in graph data:', createdNode);
                 this.selectEntity(createdNode);
-              }, 300);
-            }
+              } else {
+                console.warn('Could not find newly created entity in graph data');
+                // 如果在图数据中找不到，直接设置选中实体
+                this.selectedEntity = savedEntity;
+                this.entityRelationships = [];
+              }
+            }, 500); // 给图数据加载一些时间
           }
           
           // 重置编辑模式
