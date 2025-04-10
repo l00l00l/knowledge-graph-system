@@ -634,6 +634,8 @@
           } else {
             selectedEntityData.properties = {};
           }
+
+          console.log('Final properties:', selectedEntityData.properties);
           
           // 更新选中的实体
           this.selectedEntity = selectedEntityData;
@@ -1392,28 +1394,7 @@
         this.isEditing = true;
         this.isCreatingMode = true; // 添加这个标志，表示是创建而非编辑
       },
-      // 辅助函数，确保properties是对象而非字符串
-      ensurePropertiesObject(entity) {
-        if (!entity) return entity;
-        
-        const entityCopy = {...entity};
-        
-        if (entityCopy.properties) {
-          if (typeof entityCopy.properties === 'string') {
-            try {
-              entityCopy.properties = JSON.parse(entityCopy.properties);
-              console.log('Successfully parsed properties string to object:', entityCopy.properties);
-            } catch (e) {
-              console.error('Error parsing properties string:', e);
-              entityCopy.properties = {};
-            }
-          }
-        } else {
-          entityCopy.properties = {};
-        }
-        
-        return entityCopy;
-      },
+
       async saveEntityChanges() {
         console.log('Saving entity changes');
         
@@ -1501,6 +1482,30 @@
           // 处理返回数据
           const savedEntity = await response.json();
           console.log('Entity saved successfully:', savedEntity);
+
+          // 在此处添加以下代码 - 专门处理新创建的实体属性
+          if (this.isCreatingMode) {
+            console.log('Handling new entity properties, original properties:', 
+                typeof savedEntity.properties, savedEntity.properties);
+            
+            // 1. 如果属性是字符串，尝试解析
+            if (typeof savedEntity.properties === 'string') {
+              try {
+                savedEntity.properties = JSON.parse(savedEntity.properties);
+                console.log('Successfully parsed properties string for new entity:', savedEntity.properties);
+              } catch (e) {
+                console.error('Error parsing properties string for new entity:', e);
+                // 2. 如果解析失败，使用表单中的属性数据
+                savedEntity.properties = JSON.parse(JSON.stringify(this.editFormData.properties || {}));
+                console.log('Using form properties instead:', savedEntity.properties);
+              }
+            } 
+            // 3. 如果属性为空或不存在，使用表单中的属性数据
+            else if (!savedEntity.properties || Object.keys(savedEntity.properties).length === 0) {
+              savedEntity.properties = JSON.parse(JSON.stringify(this.editFormData.properties || {}));
+              console.log('No properties in saved entity, using form properties:', savedEntity.properties);
+            }
+          }
           
           // 处理关系 - 创建新关系
           if (this.entityRelationships.length > 0) {
