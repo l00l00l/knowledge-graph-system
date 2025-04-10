@@ -1560,9 +1560,9 @@
                 this.selectEntity(createdNode);
               } else {
                 console.warn('Could not find newly created entity in graph data');
-                // 如果在图数据中找不到，直接设置选中实体
-                this.selectedEntity = savedEntity;
-                this.entityRelationships = [];
+                // 修改：使用selectEntity方法而不是直接设置
+                this.selectEntity(savedEntity);
+                // 不需要手动设置entityRelationships，selectEntity会处理
               }
             }, 500); // 给图数据加载一些时间
           }
