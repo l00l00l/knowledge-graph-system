@@ -212,12 +212,22 @@ class Neo4jDatabase(DatabaseInterface[T]):
                 entity_dict["properties"] = json.dumps(clean_props)
                 print(f"Properties serialized to JSON: {entity_dict['properties']}")
             
+            # 特别处理tags字段，确保它是JSON字符串
+            if "tags" in entity_dict:
+                if isinstance(entity_dict["tags"], list):
+                    entity_dict["tags"] = json.dumps(entity_dict["tags"])
+                elif entity_dict["tags"] is None:
+                    entity_dict["tags"] = "[]"
+                print(f"Tags field processed: {entity_dict['tags']}")
+            
             # 处理其他复杂类型
             for key, value in list(entity_dict.items()):
-                if key != "properties" and isinstance(value, (dict, list)):
+                if key not in ["properties", "tags"] and isinstance(value, (dict, list)):
                     entity_dict[key] = json.dumps(value)
                 elif isinstance(value, UUID):
                     entity_dict[key] = str(value)
+                elif key in ["created_at", "updated_at"] and isinstance(value, datetime):
+                    entity_dict[key] = value.isoformat()
             
             # 打印即将发送到数据库的entity_dict
             print(f"Entity dict ready for database update: {entity_dict}")
@@ -257,38 +267,9 @@ class Neo4jDatabase(DatabaseInterface[T]):
                     except Exception as type_error:
                         print(f"Error updating entity type: {type_error}")
                 
-                # 返回更新后的对象
-                # 先从数据库读取最新数据
-                read_query = """
-                MATCH (e)
-                WHERE toString(e.id) = $id
-                RETURN e, labels(e) as labels
-                """
-                
-                read_result = await session.run(read_query, id=entity_id)
-                read_record = await read_result.single()
-                
-                if read_record:
-                    # 处理读取的实体数据
-                    updated_entity_data = dict(read_record["e"])
-                    entity_labels = read_record["labels"]
-                    
-                    # 处理properties字段
-                    if "properties" in updated_entity_data and isinstance(updated_entity_data["properties"], str):
-                        try:
-                            updated_entity_data["properties"] = json.loads(updated_entity_data["properties"])
-                            print(f"Successfully parsed properties from updated entity: {updated_entity_data['properties']}")
-                        except json.JSONDecodeError as e:
-                            print(f"Error parsing properties from updated entity: {e}")
-                    
-                    # 确定实体类型
-                    entity_type = next((label for label in entity_labels if label != "Entity"), "Entity")
-                    updated_entity_data["type"] = entity_type
-                    
-                    # 创建更新后的对象
-                    return type(obj)(**updated_entity_data)
-                
-                # 如果读取失败，返回原对象
+                # 直接返回原始对象而不是读取新数据
+                # 这避免了验证错误，因为原对象已经是有效的Entity实例
+                print(f"Returning original entity object as update result")
                 return obj
                     
         except Exception as e:
@@ -296,7 +277,6 @@ class Neo4jDatabase(DatabaseInterface[T]):
             import traceback
             traceback.print_exc()
             return None
-    
     async def delete(self, id: UUID) -> bool:
         """删除实体或关系"""
         try:
