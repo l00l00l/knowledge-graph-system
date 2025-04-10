@@ -14,6 +14,12 @@
           <input type="text" placeholder="搜索实体..." v-model="searchQuery" @input="filterNodes">
           <i class="fas fa-search"></i>
         </div>
+        <!-- 新增实体按钮 -->
+        <div class="new-entity-button-container">
+          <button @click="createNewEntity" class="new-entity-button">
+            <i class="fas fa-plus"></i> 新增实体
+          </button>
+        </div>
         
         <div class="filter-section">
           <h3>实体类型过滤</h3>
@@ -91,7 +97,7 @@
         <div v-if="isEditing" class="edit-modal">
           <div class="edit-modal-content">
             <div class="edit-modal-header">
-              <h3>编辑实体</h3>
+              <h3>{{ isCreatingMode ? '新增实体' : '编辑实体' }}</h3>
               <button @click="cancelEdit" class="close-btn">
                 <i class="fas fa-times"></i>
               </button>
@@ -388,6 +394,7 @@
         isSearching: false,
         searchTimer: null,
         originalRelationships: [],
+        isCreatingMode: false,
         newRelationship: {
           direction: 'outgoing',
           type: '',
@@ -1344,34 +1351,63 @@
           }
         }
       },
+      createNewEntity() {
+        console.log('Creating new entity');
+        
+        // 创建一个空的实体对象作为编辑对象
+        this.editingEntity = {
+          id: 'new-' + Date.now(), // 临时ID，保存时会替换为后端生成的UUID
+          type: 'concept', // 默认类型
+          name: '',
+          description: '',
+          properties: {},
+          tags: []
+        };
+        
+        // 重置表单数据
+        this.editFormData = {
+          name: '',
+          type: 'concept',
+          description: '',
+          properties: {}
+        };
+        
+        // 设置默认分类
+        this.selectedEntityTypeCategory = '基础类型';
+        
+        // 清空关系列表
+        this.entityRelationships = [];
+        this.originalRelationships = [];
+        
+        // 打开编辑对话框，标记为创建模式
+        this.isEditing = true;
+        this.isCreatingMode = true; // 添加这个标志，表示是创建而非编辑
+      },
       async saveEntityChanges() {
         console.log('Saving entity changes');
         
-        // 检查是否有实体ID
-        if (!this.editingEntity || !this.editingEntity.id) {
-          alert('缺少实体ID，无法更新');
+        // 检查必填字段
+        if (!this.editFormData.name || !this.editFormData.type) {
+          alert('实体名称和类型为必填项');
           return;
         }
         
         // 详细记录当前属性数据
-        console.log('Original properties:', JSON.stringify(this.editingEntity.properties));
-        console.log('Edited properties:', JSON.stringify(this.editFormData.properties));
+        console.log('Properties:', JSON.stringify(this.editFormData.properties));
         
         // 确保properties是对象而不是字符串
         let properties = this.editFormData.properties;
         if (typeof properties === 'string') {
           try {
             properties = JSON.parse(properties);
-            console.log('Parsed properties from string:', properties);
           } catch (e) {
             console.error('Error parsing properties string:', e);
-            properties = {}; // 防止错误，使用空对象
+            properties = {}; 
           }
         }
         
-        // 准备更新的实体数据
-        const updatedEntity = {
-          ...this.editingEntity,
+        // 准备实体数据
+        const entityData = {
           name: this.editFormData.name,
           type: this.editFormData.type,
           description: this.editFormData.description,
@@ -1379,152 +1415,128 @@
           category: this.selectedEntityTypeCategory
         };
         
-        console.log('Sending update request for entity:', updatedEntity);
-        
         try {
-          // 发送更新请求
-          const response = await fetch(`/api/v1/entities/${this.editingEntity.id}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(updatedEntity)
-          });
+          let response;
+          let successMessage;
           
-          console.log('Update response status:', response.status);
+          if (this.isCreatingMode) {
+            // 创建新实体
+            console.log('Creating new entity:', entityData);
+            
+            response = await fetch('/api/v1/entities/', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(entityData)
+            });
+            
+            successMessage = '实体创建成功';
+          } else {
+            // 更新现有实体
+            console.log('Updating entity:', this.editingEntity.id);
+            
+            // 将ID添加到更新数据中
+            const updatedEntity = {
+              ...this.editingEntity,
+              ...entityData
+            };
+            
+            response = await fetch(`/api/v1/entities/${this.editingEntity.id}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(updatedEntity)
+            });
+            
+            successMessage = '实体更新成功';
+          }
+          
           if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`实体更新失败: ${response.status} - ${errorText}`);
+            throw new Error(`操作失败: ${response.status} - ${errorText}`);
           }
           
           // 处理返回数据
-          const updatedEntityData = await response.json();
-          console.log('Entity update successful, received data:', updatedEntityData);
+          const savedEntity = await response.json();
+          console.log('Entity saved successfully:', savedEntity);
           
-          // 确保返回的数据包含properties并正确处理
-          if (!updatedEntityData.properties) {
-            updatedEntityData.properties = {};
-            console.warn('Returned entity data does not contain properties, adding empty object');
-          } else if (typeof updatedEntityData.properties === 'string') {
-            try {
-              updatedEntityData.properties = JSON.parse(updatedEntityData.properties);
-              console.log('Parsed properties from string:', updatedEntityData.properties);
-            } catch (e) {
-              console.error('Error parsing returned properties:', e);
-              updatedEntityData.properties = {};
-            }
-          }
-          
-          // 处理关系更新
-          console.log('Updating relationships:', this.entityRelationships);
-          console.log('Original relationships:', this.originalRelationships);
-          
-          // 找出被删除的关系
-          const currentRelationshipIds = new Set(this.entityRelationships.map(rel => rel.id));
-          const deletedRelationships = this.originalRelationships.filter(
-            rel => !rel.id.startsWith('temp-') && !currentRelationshipIds.has(rel.id)
-          );
-          
-          console.log('Identified deleted relationships:', deletedRelationships);
-          
-          // 处理新关系创建
-          const relationshipPromises = this.entityRelationships.map(async relationship => {
-            // 跳过已有ID的关系或已处理的关系
-            if (!relationship.id || relationship.id.startsWith('temp-')) {
-              // 这是新关系
-              const relationshipData = {
-                type: relationship.type,
-                source_id: relationship.direction === 'outgoing' ? this.editingEntity.id : relationship.target.id,
-                target_id: relationship.direction === 'outgoing' ? relationship.target.id : this.editingEntity.id,
-                properties: relationship.properties || {},
-                bidirectional: false,
-                certainty: 1.0
-              };
-              
-              console.log('Creating new relationship:', relationshipData);
-              
-              // 发送API请求创建关系
-              const relResponse = await fetch('/api/v1/relationships/', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(relationshipData)
-              });
-              
-              if (!relResponse.ok) {
-                console.error('Failed to create relationship:', await relResponse.text());
-                return false;
-              }
-              
-              return true;
-            }
+          // 处理关系 - 创建新关系
+          if (this.entityRelationships.length > 0) {
+            console.log('Processing relationships');
             
-            return true; // 跳过现有关系
-          });
-          
-          // 处理删除关系的请求
-          const deletePromises = deletedRelationships.map(async rel => {
-            const relationshipId = typeof rel.id === 'object' ? rel.id.id : rel.id;
-            console.log(`Deleting relationship with ID: ${relationshipId}`);
-            
-            try {
-              const response = await fetch(`/api/v1/relationships/${relationshipId}`, {
-                method: 'DELETE'
-              });
-              
-              if (!response.ok) {
-                console.error(`Failed to delete relationship ${relationshipId}:`, await response.text());
-                return false;
+            // 如果是新实体，所有关系都需要创建
+            const relationshipPromises = this.entityRelationships.map(async relationship => {
+              // 仅处理临时关系（新增关系）
+              if (!relationship.id || relationship.id.startsWith('temp-')) {
+                const relationshipData = {
+                  type: relationship.type,
+                  source_id: relationship.direction === 'outgoing' ? savedEntity.id : relationship.target.id,
+                  target_id: relationship.direction === 'outgoing' ? relationship.target.id : savedEntity.id,
+                  properties: relationship.properties || {},
+                  bidirectional: false,
+                  certainty: 1.0
+                };
+                
+                console.log('Creating relationship:', relationshipData);
+                
+                const relResponse = await fetch('/api/v1/relationships/', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify(relationshipData)
+                });
+                
+                if (!relResponse.ok) {
+                  console.error('Failed to create relationship:', await relResponse.text());
+                  return false;
+                }
+                
+                return true;
               }
-              
-              console.log(`Successfully deleted relationship ${relationshipId}`);
               return true;
-            } catch (error) {
-              console.error(`Error deleting relationship ${relationshipId}:`, error);
-              return false;
+            });
+            
+            // 等待所有关系操作完成
+            const results = await Promise.all(relationshipPromises);
+            
+            if (results.some(result => !result)) {
+              console.warn('Some relationship operations failed');
             }
-          });
-          
-          // 等待所有关系操作完成
-          const createResults = await Promise.all(relationshipPromises);
-          const deleteResults = await Promise.all(deletePromises);
-          
-          if (createResults.some(result => !result) || deleteResults.some(result => !result)) {
-            console.warn('Some relationship operations failed');
           }
-          
-          // 更新节点数组中的实体
-          const index = this.nodes.findIndex(node => node.id === updatedEntityData.id);
-          if (index !== -1) {
-            this.nodes[index] = updatedEntityData;
-          }
-          
-          // 更新选中的实体
-          this.selectedEntity = updatedEntityData;
-          
-          // 重置编辑模式
-          this.isEditing = false;
-          this.editingEntity = null;
           
           // 刷新图数据
           await this.fetchGraphData();
           
-          // 重新选择实体以查看更新的数据
-          setTimeout(() => {
-            this.selectEntity(updatedEntityData);
-          }, 300);
+          // 如果是新创建的实体，选中它以显示详情
+          if (this.isCreatingMode) {
+            // 找到新创建的实体
+            const createdNode = this.nodes.find(n => n.id === savedEntity.id);
+            if (createdNode) {
+              setTimeout(() => {
+                this.selectEntity(createdNode);
+              }, 300);
+            }
+          }
+          
+          // 重置编辑模式
+          this.isEditing = false;
+          this.isCreatingMode = false;
+          this.editingEntity = null;
           
           // 显示成功消息
-          alert('实体及关系更新成功');
+          alert(successMessage);
         } catch (error) {
-          console.error('Error updating entity:', error);
-          alert('更新失败: ' + error.message);
+          console.error('Error saving entity:', error);
+          alert('保存失败: ' + error.message);
         }
       },
 
       cancelEdit() {
         this.isEditing = false;
+        this.isCreatingMode = false;
         this.editingEntity = null;
       },
 
@@ -2908,4 +2920,37 @@
     color: #f44336;
   }
   
+  /* 新增实体按钮样式 */
+  .new-entity-button-container {
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  .new-entity-button {
+    width: 100%;
+    padding: 10px 15px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+
+  .new-entity-button:hover {
+    background-color: #43A047;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  }
+
+  .new-entity-button i {
+    font-size: 16px;
+  }
   </style>
