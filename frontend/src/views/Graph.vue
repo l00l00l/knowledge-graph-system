@@ -1549,23 +1549,20 @@
           
           // 刷新图数据
           await this.fetchGraphData();
-          
-          // 如果是新创建的实体，选中它以显示详情
-          if (this.isCreatingMode) {
-            // 直接使用保存后返回的实体数据
-            setTimeout(() => {
-              const createdNode = this.nodes.find(n => n.id === savedEntity.id);
-              if (createdNode) {
-                console.log('Found newly created node in graph data:', createdNode);
-                this.selectEntity(createdNode);
-              } else {
-                console.warn('Could not find newly created entity in graph data');
-                // 修改：使用selectEntity方法而不是直接设置
-                this.selectEntity(savedEntity);
-                // 不需要手动设置entityRelationships，selectEntity会处理
-              }
-            }, 500); // 给图数据加载一些时间
-          }
+
+          // 无论是新创建的实体还是更新的实体，都刷新选中状态
+          setTimeout(() => {
+            // 首先尝试在刷新后的图数据中找到实体
+            const refreshedNode = this.nodes.find(n => n.id === savedEntity.id);
+            if (refreshedNode) {
+              console.log('Found entity in refreshed graph data:', refreshedNode);
+              this.selectEntity(refreshedNode);
+            } else {
+              console.warn('Could not find entity in refreshed graph data, using API data');
+              // 使用API返回的实体数据
+              this.selectEntity(savedEntity);
+            }
+          }, 500);
           
           // 重置编辑模式
           this.isEditing = false;
