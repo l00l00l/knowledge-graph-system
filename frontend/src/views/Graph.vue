@@ -39,24 +39,25 @@
         
         <!-- 改进的实体类型过滤器 -->
         <div class="filter-section">
-        <h3>实体类型过滤</h3>
-        <div class="type-filters">
-          <label 
-            v-for="type in filteredEntityTypesForFilter" 
-            :key="type.type_code" 
-            class="filter-checkbox"
-          >
-            <input 
-              type="checkbox" 
-              :value="type.type_code" 
-              v-model="activeFilters"
-              @change="filterNodes"
+          <h3>实体类型过滤</h3>
+          <div class="type-filters">
+            <label 
+              v-for="type in entityTypes" 
+              :key="type.type_code"
+              v-show="!selectedCategory || type.category === selectedCategory"
+              class="filter-checkbox"
             >
-            <span :class="['node-badge', type.type_code]" :style="{backgroundColor: type.color}"></span>
-            <span>{{ type.type_name }}</span>
-          </label>
+              <input 
+                type="checkbox" 
+                :value="type.type_code" 
+                v-model="activeFilters"
+                @change="filterNodes"
+              >
+              <span :class="['node-badge', type.type_code]" :style="{backgroundColor: type.color}"></span>
+              <span>{{ type.type_name }}</span>
+            </label>
+          </div>
         </div>
-      </div>
         
         <!-- 实体列表 -->
         <div class="entity-list-section" v-if="filteredNodes.length > 0">
