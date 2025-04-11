@@ -290,9 +290,22 @@ class Neo4jDatabase(DatabaseInterface[T]):
             query = """
             MATCH (e)
             WHERE toString(e.id) = $id
-            SET e = $properties
+            SET e.name = $name,
+                e.type = $type,
+                e.description = $description,
+                e.properties = $properties,
+                e.updated_at = $updated_at
             RETURN e
             """
+            # 准备参数
+            params = {
+                "id": entity_id,
+                "name": entity_dict.get("name"),
+                "type": entity_dict.get("type"),
+                "description": entity_dict.get("description"),
+                "properties": entity_dict.get("properties"),
+                "updated_at": datetime.now().isoformat()
+            }
             
             # 更新或添加实体类型标签
             type_query = """
@@ -306,7 +319,7 @@ class Neo4jDatabase(DatabaseInterface[T]):
             
             async with self.driver.session(database=self.database) as session:
                 # 执行属性更新
-                result = await session.run(query, id=entity_id, properties=entity_dict)
+                result = await session.run(query,  **params)
                 record = await result.single()
                 if record:
                     print(f"Successfully updated entity properties")
