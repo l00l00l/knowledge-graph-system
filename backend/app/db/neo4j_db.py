@@ -180,6 +180,34 @@ class Neo4jDatabase(DatabaseInterface[T]):
                 
                 if 'updated_at' not in entity_data or entity_data['updated_at'] is None:
                     entity_data['updated_at'] = current_time
+                # 处理时间字段 - 强制转换为字符串
+                if 'created_at' in entity_data:
+                    try:
+                        # 无论原始类型是什么，强制转换为字符串
+                        entity_data['created_at'] = str(entity_data['created_at'])
+                    except:
+                        entity_data['created_at'] = datetime.now().isoformat()
+                else:
+                    entity_data['created_at'] = datetime.now().isoformat()
+                if 'updated_at' in entity_data:
+                    try:
+                        entity_data['updated_at'] = str(entity_data['updated_at'])
+                    except:
+                        entity_data['updated_at'] = datetime.now().isoformat()
+                else:
+                    entity_data['updated_at'] = datetime.now().isoformat()
+
+                # 特别处理source_location字段
+                if 'source_location' in entity_data:
+                    if entity_data['source_location'] is None:
+                        entity_data['source_location'] = {}
+                    elif isinstance(entity_data['source_location'], str):
+                        try:
+                            entity_data['source_location'] = json.loads(entity_data['source_location'])
+                        except:
+                            entity_data['source_location'] = {}
+                    elif not isinstance(entity_data['source_location'], dict):
+                        entity_data['source_location'] = {}
                 
                 # 处理JSON字符串字段
                 for key, value in list(entity_data.items()):
@@ -214,7 +242,27 @@ class Neo4jDatabase(DatabaseInterface[T]):
                 print(f"Found entity: {entity_data.get('name', 'Unnamed')} (Type: {entity_type})")
                 
                 # 返回实体对象
-                return Entity(**entity_data)
+                # 尝试创建实体对象，添加更详细的错误处理
+                try:
+                    return Entity(**entity_data)
+                except Exception as validation_error:
+                    print(f"严重：实体验证错误 {validation_error}，尝试修复...")
+                    
+                    # 修复所有可能的问题
+                    for field in ['source_id', 'source_type', 'extraction_method']:
+                        if field in entity_data and not isinstance(entity_data[field], (str, type(None))):
+                            entity_data[field] = None
+                    
+                    for field in ['confidence', 'importance', 'understanding_level']:
+                        if field in entity_data and not isinstance(entity_data[field], (float, int, type(None))):
+                            entity_data[field] = None
+                    
+                    # 最后一次尝试创建实体
+                    try:
+                        return Entity(**entity_data)
+                    except Exception as final_error:
+                        print(f"无法修复实体验证错误，最终错误: {final_error}")
+                        return None
                     
         except Exception as e:
             print(f"Error in read method: {e}")
@@ -264,7 +312,7 @@ class Neo4jDatabase(DatabaseInterface[T]):
                 
                 # 用处理后的properties替换原始properties
                 entity_dict["properties"] = json.dumps(clean_props)
-                print(f"Properties serialized to JSON: {entity_dict['properties']}")
+                #print(f"Properties serialized to JSON: {entity_dict['properties']}")
             
             # 特别处理tags字段，确保它是JSON字符串
             if "tags" in entity_dict:
@@ -294,6 +342,7 @@ class Neo4jDatabase(DatabaseInterface[T]):
                 e.type = $type,
                 e.description = $description,
                 e.properties = $properties,
+                e.category = $category,
                 e.updated_at = $updated_at
             RETURN e
             """
@@ -304,6 +353,7 @@ class Neo4jDatabase(DatabaseInterface[T]):
                 "type": entity_dict.get("type"),
                 "description": entity_dict.get("description"),
                 "properties": entity_dict.get("properties"),
+                "category": entity_dict.get("category"),
                 "updated_at": datetime.now().isoformat()
             }
             
