@@ -39,24 +39,24 @@
         
         <!-- 改进的实体类型过滤器 -->
         <div class="filter-section">
-          <h3>实体类型过滤</h3>
-          <div class="type-filters">
-            <label 
-              v-for="type in filteredEntityTypes" 
-              :key="type.type_code" 
-              class="filter-checkbox"
+        <h3>实体类型过滤</h3>
+        <div class="type-filters">
+          <label 
+            v-for="type in filteredEntityTypesForFilter" 
+            :key="type.type_code" 
+            class="filter-checkbox"
+          >
+            <input 
+              type="checkbox" 
+              :value="type.type_code" 
+              v-model="activeFilters"
+              @change="filterNodes"
             >
-              <input 
-                type="checkbox" 
-                :value="type.type_code" 
-                v-model="activeFilters"
-                @change="filterNodes"
-              >
-              <span :class="['node-badge', type.type_code]" :style="{backgroundColor: type.color}"></span>
-              <span>{{ type.type_name }}</span>
-            </label>
-          </div>
+            <span :class="['node-badge', type.type_code]" :style="{backgroundColor: type.color}"></span>
+            <span>{{ type.type_name }}</span>
+          </label>
         </div>
+      </div>
         
         <!-- 实体列表 -->
         <div class="entity-list-section" v-if="filteredNodes.length > 0">
@@ -744,7 +744,16 @@
           this.entityRelationships = this.getMockRelationships(entityId);
         }
       },
-      
+      // 新增计算属性，用于筛选面板显示
+      filteredEntityTypesForFilter() {
+        // 如果选择了"所有分类"，则显示所有实体类型
+        if (!this.selectedCategory) {
+          return this.entityTypes;
+        }
+        
+        // 如果选择了特定分类，则只显示该分类下的类型
+        return this.entityTypes.filter(type => type.category === this.selectedCategory);
+      },
       getMockRelationships(entityId) {
         // Generate mock relationships for demo purposes
         const rels = [];
