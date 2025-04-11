@@ -69,8 +69,15 @@
               :class="{ active: selectedEntity && selectedEntity.id === node.id }"
               @click="focusOnEntity(node)"
             >
-              <span :class="['entity-type-dot', node.type]" :title="getEntityTypeName(node.type)"></span>
-              <span class="entity-name" :title="node.name">{{ node.name }}</span>
+              <div class="entity-item-content">
+                <div class="entity-icon" :style="{ backgroundColor: getNodeColor(node.type) }">
+                  <i :class="getEntityTypeIcon(node.type)"></i>
+                </div>
+                <div class="entity-info">
+                  <span class="entity-name" :title="node.name">{{ node.name }}</span>
+                  <span class="entity-type">{{ getEntityTypeName(node.type) }}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -521,11 +528,30 @@
       },
       
 
+      // 修改计算属性
       filteredEntityTypes() {
-        if (!this.selectedCategory) {
+        // 添加更详细的调试日志
+        console.log('Computing filteredEntityTypes');
+        console.log('  Selected entity category:', this.selectedEntityTypeCategory);
+        console.log('  All entity types:', this.entityTypes);
+        
+        // 如果没有选择分类，返回所有类型
+        if (!this.selectedEntityTypeCategory) {
+          console.log('  No category selected, returning all types');
           return this.entityTypes;
         }
-        return this.entityTypes.filter(type => type.category === this.selectedCategory);
+        
+        // 精确匹配分类
+        const filtered = this.entityTypes.filter(type => {
+          const matches = type.category === this.selectedEntityTypeCategory;
+          if (matches) {
+            console.log(`  Type ${type.type_name} matches category ${this.selectedEntityTypeCategory}`);
+          }
+          return matches;
+        });
+        
+        console.log(`  Filtered ${filtered.length} entity types for category ${this.selectedEntityTypeCategory}`);
+        return filtered;
       },
 
       
@@ -1012,13 +1038,13 @@
         // 保存svg引用用于后续调整大小
         this.svg = svg;
         // Add zoom functionality
-        const zoom = d3.zoom()
+        this.zoom = d3.zoom()
           .scaleExtent([0.1, 4])
           .on('zoom', (event) => {
             g.attr('transform', event.transform);
           });
         
-        svg.call(zoom);
+        svg.call(this.zoom);
         
         // Create container group for zoom
         const g = svg.append('g');
@@ -3139,4 +3165,67 @@
   .new-entity-button i {
     font-size: 16px;
   }
+  .entity-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    background-color: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+
+  .entity-list-item {
+    padding: 10px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s;
+  }
+
+  .entity-list-item:last-child {
+    border-bottom: none;
+  }
+
+  .entity-list-item:hover {
+    background-color: #f5f7fa;
+  }
+
+  .entity-list-item.active {
+    background-color: #e3f2fd;
+    border-left: 3px solid #2196f3;
+  }
+
+  .entity-item-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .entity-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  .entity-info {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .entity-name {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .entity-type {
+    font-size: 0.8rem;
+    color: #666;
+  }
+
   </style>
