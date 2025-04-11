@@ -11,9 +11,16 @@
       
       <div v-show="!isPanelCollapsed" class="panel-content">
         <div class="search-box">
-          <input type="text" placeholder="搜索实体..." v-model="searchQuery" @input="filterNodes">
+          <input 
+            type="text"
+            v-model="searchQuery"
+            placeholder="搜索实体..."
+            class="search-input"
+            @input="filterNodes"
+          >
           <i class="fas fa-search"></i>
         </div>
+        
         <!-- 新增实体按钮 -->
         <div class="new-entity-button-container">
           <button @click="createNewEntity" class="new-entity-button">
@@ -21,14 +28,50 @@
           </button>
         </div>
         
+        <!-- 改进的分类过滤器 -->
+        <div class="filter-section">
+          <h3>分类筛选</h3>
+          <select v-model="selectedCategory" @change="updateEntityTypeFilters" class="category-filter">
+            <option value="">所有分类</option>
+            <option v-for="category in entityTypeCategories" :key="category">{{ category }}</option>
+          </select>
+        </div>
+        
+        <!-- 改进的实体类型过滤器 -->
         <div class="filter-section">
           <h3>实体类型过滤</h3>
           <div class="type-filters">
-            <label v-for="type in entityTypes" :key="type" class="filter-checkbox">
-              <input type="checkbox" :value="type" v-model="activeFilters">
-              <span :class="['node-badge', type]"></span>
-              <span>{{ type }}</span>
+            <label 
+              v-for="type in filteredEntityTypes" 
+              :key="type.type_code" 
+              class="filter-checkbox"
+            >
+              <input 
+                type="checkbox" 
+                :value="type.type_code" 
+                v-model="activeFilters"
+                @change="filterNodes"
+              >
+              <span :class="['node-badge', type.type_code]" :style="{backgroundColor: type.color}"></span>
+              <span>{{ type.type_name }}</span>
             </label>
+          </div>
+        </div>
+        
+        <!-- 实体列表 -->
+        <div class="entity-list-section" v-if="filteredNodes.length > 0">
+          <h3>实体列表 ({{ filteredNodes.length }})</h3>
+          <div class="entity-list">
+            <div 
+              v-for="node in filteredNodes" 
+              :key="node.id" 
+              class="entity-list-item"
+              :class="{ active: selectedEntity && selectedEntity.id === node.id }"
+              @click="focusOnEntity(node)"
+            >
+              <span :class="['entity-type-dot', node.type]" :title="getEntityTypeName(node.type)"></span>
+              <span class="entity-name" :title="node.name">{{ node.name }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -377,6 +420,7 @@
       return {
         isPanelCollapsed: false,
         searchQuery: '',
+        selectedCategory: '',  
         activeFilters: [],
         selectedEntity: null,
         entityRelationships: [],
@@ -478,35 +522,10 @@
       
 
       filteredEntityTypes() {
-        // 添加更多详细的调试日志
-        console.log('Computing filteredEntityTypes');
-        console.log('  Selected category:', this.selectedEntityTypeCategory);
-        console.log('  All entity types:', this.entityTypes);
-        
-        // 如果没有选择分类，返回所有类型
-        if (!this.selectedEntityTypeCategory) {
-          console.log('  No category selected, returning all types');
+        if (!this.selectedCategory) {
           return this.entityTypes;
         }
-        
-        // 精确匹配分类
-        const filtered = this.entityTypes.filter(type => {
-          const matches = type.category === this.selectedEntityTypeCategory;
-          if (matches) {
-            console.log(`  Type ${type.type_name} matches category ${this.selectedEntityTypeCategory}`);
-          }
-          return matches;
-        });
-        
-        console.log(`  Filtered ${filtered.length} entity types for category ${this.selectedEntityTypeCategory}`);
-        
-        // 如果过滤结果为空，可能是因为分类不匹配，日志警告
-        if (filtered.length === 0) {
-          console.warn('  Warning: No entity types match the selected category!');
-          console.log('  Available categories in data:', [...new Set(this.entityTypes.map(t => t.category))]);
-        }
-        
-        return filtered;
+        return this.entityTypes.filter(type => type.category === this.selectedCategory);
       },
 
       
@@ -546,18 +565,18 @@
         return this.newRelationship.type && this.newRelationship.targetEntity;
       },
       filteredNodes() {
-        let result = this.nodes;
+        let result = [...this.nodes];
         
-        // 过滤搜索查询
+        // 应用搜索过滤
         if (this.searchQuery) {
           const query = this.searchQuery.toLowerCase();
           result = result.filter(node => 
-            node.name.toLowerCase().includes(query) || 
+            (node.name && node.name.toLowerCase().includes(query)) || 
             (node.description && node.description.toLowerCase().includes(query))
           );
         }
         
-        // 过滤实体类型
+        // 应用实体类型过滤
         if (this.activeFilters.length > 0) {
           result = result.filter(node => this.activeFilters.includes(node.type));
         }
@@ -569,9 +588,17 @@
         if (!this.filteredNodes.length) return [];
         
         const nodeIds = new Set(this.filteredNodes.map(node => node.id));
-        return this.relationships.filter(rel => 
-          nodeIds.has(rel.source) && nodeIds.has(rel.target)
-        );
+        return this.relationships.filter(rel => {
+          const sourceId = typeof rel.source === 'object' ? rel.source.id : rel.source;
+          const targetId = typeof rel.target === 'object' ? rel.target.id : rel.target;
+          return nodeIds.has(sourceId) && nodeIds.has(targetId);
+        });
+      },
+      hasProperties() {
+        return this.selectedEntity && 
+              this.selectedEntity.properties && 
+              typeof this.selectedEntity.properties === 'object' && 
+              Object.keys(this.selectedEntity.properties).length > 0;
       }
     },
     methods: {
@@ -582,18 +609,25 @@
       },
       
       filterNodes() {
+        console.log('Filtering nodes with:', {
+          searchQuery: this.searchQuery,
+          activeFilters: this.activeFilters
+        });
+        
+        // 更新可视化
         this.updateVisualization();
       },
       
       updateVisualization() {
-        // Update visualization with filtered data
-        console.log('Updating visualization with', this.filteredNodes.length, 'nodes and', this.filteredRelationships.length, 'relationships');
+        if (!this.visualizer) {
+          console.log('Visualizer not initialized yet');
+          return;
+        }
         
-        // If we had the actual visualizer, we would call:
-        // this.visualizer.updateData({
-        //   nodes: this.filteredNodes,
-        //   links: this.filteredRelationships
-        // });
+        console.log(`Updating visualization with ${this.filteredNodes.length} nodes and ${this.filteredRelationships.length} relationships`);
+        
+        // 使用筛选后的数据重新绘制图谱
+        this.initVisualization();
       },
       
       async selectEntity(entity) {
@@ -740,6 +774,13 @@
       clearSelection() {
         this.selectedEntity = null;
         this.entityRelationships = [];
+        
+        // 重置高亮状态
+        if (this.svg) {
+          this.svg.selectAll('.node')
+            .classed('highlighted', false)
+            .classed('dimmed', false);
+        }
       },
       
       formatPropertyValue(value) {
@@ -1071,14 +1112,103 @@
             node
               .attr('transform', d => `translate(${d.x}, ${d.y})`);
           });
-        
+        // 重置视图
+        this.resetView();
       },
 
+      resetView() {
+        const container = this.$refs.graphContainer;
+        if (!container || !this.svg || !this.zoom) return;
+        
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        
+        this.svg.transition().duration(500).call(
+          this.zoom.transform,
+          d3.zoomIdentity
+            .translate(width / 2, height / 2)
+            .scale(0.8)
+            .translate(-width / 2, -height / 2)
+        );
+      },
       getEntityTypeName(typeCode) {
         const type = this.entityTypes.find(t => t.type_code === typeCode);
         return type ? type.type_name : typeCode;
       },
       
+      // 新增：根据ID或实体对象聚焦到实体
+      focusOnEntity(entityOrId) {
+        let entity = null;
+        
+        // 检查参数是ID还是实体对象
+        if (typeof entityOrId === 'string') {
+          entity = this.nodes.find(n => n.id === entityOrId);
+        } else {
+          entity = entityOrId;
+        }
+        
+        if (!entity) {
+          console.warn('Entity not found:', entityOrId);
+          return;
+        }
+        
+        console.log('Focusing on entity:', entity.name);
+        
+        // 选中该实体
+        this.selectEntity(entity);
+        
+        // 在图中突出显示该实体
+        this.highlightNode(entity.id);
+        
+        // 使用D3缩放到该实体位置
+        if (this.svg && entity.x && entity.y) {
+          console.log(`Zooming to position: (${entity.x}, ${entity.y})`);
+          
+          const container = this.$refs.graphContainer;
+          const width = container.clientWidth;
+          const height = container.clientHeight;
+          
+          // 计算缩放比例和平移量
+          const scale = 2;
+          const translateX = width / 2 - entity.x * scale;
+          const translateY = height / 2 - entity.y * scale;
+          
+          // 应用动画过渡
+          this.svg.transition()
+            .duration(750)
+            .call(this.zoom.transform, 
+                  d3.zoomIdentity
+                    .translate(translateX, translateY)
+                    .scale(scale));
+        }
+      },
+
+      // 高亮显示节点
+      highlightNode(nodeId) {
+        if (!this.svg) return;
+        
+        // 重置所有节点的样式
+        this.svg.selectAll('.node')
+          .classed('highlighted', false)
+          .classed('dimmed', false);
+        
+        // 高亮目标节点
+        this.svg.selectAll('.node')
+          .filter(d => d.id === nodeId)
+          .classed('highlighted', true);
+        
+        // 其他节点变暗
+        this.svg.selectAll('.node')
+          .filter(d => d.id !== nodeId)
+          .classed('dimmed', true);
+        
+        // 设置延时恢复普通状态
+        setTimeout(() => {
+          this.svg.selectAll('.node')
+            .classed('highlighted', false)
+            .classed('dimmed', false);
+        }, 3000);
+      },
       getRelationshipTypeName(typeCode) {
         const type = this.relationshipTypes.find(t => t.type_code === typeCode);
         return type ? type.type_name : typeCode;
@@ -1362,6 +1492,13 @@
             this.entityRelationships.splice(index, 1);
           }
         }
+      },
+      updateEntityTypeFilters() {
+        console.log(`分类已更改为: ${this.selectedCategory}`);
+        // 当分类改变时，清空当前选择的类型过滤器
+        this.activeFilters = [];
+        // 应用过滤
+        this.filterNodes();
       },
       createNewEntity() {
         console.log('Creating new entity');
