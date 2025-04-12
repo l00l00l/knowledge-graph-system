@@ -1279,12 +1279,22 @@
             throw new Error(`删除失败: ${response.status}`);
           }
           
+          // 获取实体ID用于过滤
+          const entityId = this.editingEntity.id;
           // 从节点数组中移除该实体
           const index = this.nodes.findIndex(node => node.id === this.editingEntity.id);
           if (index !== -1) {
             this.nodes.splice(index, 1);
           }
           
+          // 同时从关系数组中移除所有与该实体相关的关系
+          this.relationships = this.relationships.filter(rel => {
+            const sourceId = typeof rel.source === 'object' ? rel.source.id : rel.source;
+            const targetId = typeof rel.target === 'object' ? rel.target.id : rel.target;
+            return sourceId !== entityId && targetId !== entityId;
+          });
+          
+          console.log(`删除实体后，关系数组长度: ${this.relationships.length}`);
           // 清除选择的实体
           this.selectedEntity = null;
           
