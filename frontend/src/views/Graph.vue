@@ -93,7 +93,10 @@
       <div class="entity-detail-container">
         <div v-if="selectedEntity" class="entity-card">
           <div class="entity-header" :class="selectedEntity.type">
-            <h2>{{ selectedEntity.name }}</h2>
+            <h2 class="clickable-entity-name" @click="showJsonEditor">
+              {{ selectedEntity.name }}
+              <i class="fas fa-edit edit-icon"></i>
+            </h2>
             <span class="entity-type-badge">{{ selectedEntity.type }}</span>
           </div>
           
@@ -417,6 +420,49 @@
       </div>
     </div>
   </div>
+  <!-- JSON编辑器模态框 -->
+  <div v-if="showJsonModal" class="json-edit-modal">
+    <div class="json-edit-content">
+      <div class="json-edit-header">
+        <h3>编辑实体数据 (JSON)</h3>
+        <button @click="closeJsonEditor" class="close-btn">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <div class="json-edit-body">
+        <div class="warning-message">
+          <i class="fas fa-exclamation-triangle"></i>
+          <span>高级功能：直接编辑JSON可能会导致数据不一致。请确保您了解实体数据结构。</span>
+        </div>
+        
+        <textarea 
+          v-model="jsonEditorContent" 
+          class="json-editor"
+          spellcheck="false"
+          placeholder="实体JSON数据"
+          rows="20"
+        ></textarea>
+        
+        <div v-if="jsonValidationError" class="json-validation-error">
+          <i class="fas fa-times-circle"></i>
+          <span>{{ jsonValidationError }}</span>
+        </div>
+      </div>
+      
+      <div class="json-edit-footer">
+        <button @click="formatJson" class="format-btn">
+          <i class="fas fa-code"></i> 格式化JSON
+        </button>
+        <div class="right-actions">
+          <button @click="closeJsonEditor" class="cancel-btn">取消</button>
+          <button @click="saveJsonChanges" class="save-btn" :disabled="!!jsonValidationError">
+            <i class="fas fa-save"></i> 保存修改
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
   
   <script>
@@ -449,6 +495,10 @@
         searchTimer: null,
         originalRelationships: [],
         isCreatingMode: false,
+        // 新增JSON编辑器相关数据
+        showJsonModal: false,
+        jsonEditorContent: '',
+        jsonValidationError: null,
         newRelationship: {
           direction: 'outgoing',
           type: '',
@@ -825,8 +875,104 @@
         }
         return value;
       },
-      
+      // 显示JSON编辑器
+      showJsonEditor() {
+        if (!this.selectedEntity) return;
+        
+        try {
+          // 创建一个深拷贝，去掉可能的循环引用
+          const entityCopy = JSON.parse(JSON.stringify(this.selectedEntity));
+          
+          // 格式化JSON以便阅读
+          this.jsonEditorContent = JSON.stringify(entityCopy, null, 2);
+          this.jsonValidationError = null;
+          this.showJsonModal = true;
+        } catch (e) {
+          console.error('Error preparing JSON for editor:', e);
+          alert('准备实体数据时出错：' + e.message);
+        }
+      },
 
+      // 关闭JSON编辑器
+      closeJsonEditor() {
+        this.showJsonModal = false;
+        this.jsonEditorContent = '';
+        this.jsonValidationError = null;
+      },
+      
+      // 格式化JSON
+      formatJson() {
+        try {
+          // 解析当前JSON文本，然后重新格式化
+          const parsedJson = JSON.parse(this.jsonEditorContent);
+          this.jsonEditorContent = JSON.stringify(parsedJson, null, 2);
+          this.jsonValidationError = null;
+        } catch (e) {
+          this.jsonValidationError = 'JSON格式错误：' + e.message;
+        }
+      },
+      
+      // 验证JSON
+      validateJson() {
+        try {
+          JSON.parse(this.jsonEditorContent);
+          this.jsonValidationError = null;
+          return true;
+        } catch (e) {
+          this.jsonValidationError = 'JSON格式错误：' + e.message;
+          return false;
+        }
+      },
+      
+      // 保存JSON修改
+      async saveJsonChanges() {
+        if (!this.validateJson()) return;
+        
+        try {
+          // 解析用户编辑的JSON
+          const updatedEntity = JSON.parse(this.jsonEditorContent);
+          
+          // 确保ID匹配当前选中的实体
+          if (updatedEntity.id !== this.selectedEntity.id) {
+            if (!confirm('警告：实体ID已更改。这可能导致创建新实体而不是更新现有实体。是否继续？')) {
+              return;
+            }
+          }
+          
+          // 调用API更新实体
+          const response = await fetch(`/api/v1/entities/${this.selectedEntity.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: this.jsonEditorContent // 直接使用编辑后的JSON文本
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`操作失败: ${response.status} - ${errorText}`);
+          }
+          
+          // 处理返回数据
+          const savedEntity = await response.json();
+          console.log('实体保存成功:', savedEntity);
+          
+          // 更新本地选中的实体
+          this.selectedEntity = savedEntity;
+          
+          // 关闭编辑器
+          this.closeJsonEditor();
+          
+          // 刷新图表
+          await this.fetchGraphData();
+          
+          // 通知用户
+          alert('实体数据已成功更新');
+        } catch (error) {
+          console.error('保存实体数据错误:', error);
+          alert('更新失败: ' + error.message);
+        }
+      },
       // Update this method to explicitly log and ensure relationships are available for editing
       // 编辑实体时初始化表单数据
       editEntity() {
@@ -3246,6 +3392,128 @@
   .entity-type {
     font-size: 0.8rem;
     color: #666;
+  }
+  /* 可点击的实体名称样式 */
+  .clickable-entity-name {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: color 0.2s;
+  }
+  .clickable-entity-name:hover {
+    color: var(--primary-color, #4a90e2);
+  }
+  .edit-icon {
+    font-size: 0.7em;
+    opacity: 0.6;
+  }
+  .clickable-entity-name:hover .edit-icon {
+    opacity: 1;
+  }
+  /* JSON编辑器模态框样式 */
+  .json-edit-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1100;
+  }
+
+  .json-edit-content {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    width: 800px;
+    max-width: 90%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .json-edit-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .json-edit-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .json-editor {
+    width: 100%;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+    color: #333;
+    resize: vertical;
+    min-height: 300px;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+  }
+
+  .warning-message {
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .warning-message i {
+    font-size: 1.2em;
+  }
+
+  .json-validation-error {
+    background-color: #f8d7da;
+    color: #721c24;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .json-edit-footer {
+    padding: 16px 20px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .format-btn {
+    background-color: #e9ecef;
+    color: #495057;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .format-btn:hover {
+    background-color: #dde2e6;
   }
 
   </style>
