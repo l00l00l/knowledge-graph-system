@@ -146,6 +146,49 @@ class Neo4jDatabase(DatabaseInterface[T]):
         except Exception as e:
             print(f"Error in _create_relationship: {e}")
             raise e
+        
+    async def read_relationship(self, id: UUID) -> Optional[Relationship]:
+        """读取关系"""
+        try:
+            rel_id = str(id)
+            print(f"Reading relationship with ID: {rel_id}")
+            
+            query = """
+            MATCH ()-[r]-()
+            WHERE r.id = $id
+            RETURN r, startNode(r) as source, endNode(r) as target
+            """
+            
+            async with self.driver.session(database=self.database) as session:
+                result = await session.run(query, id=rel_id)
+                record = await result.single()
+                
+                if not record:
+                    print(f"Relationship not found with ID: {rel_id}")
+                    return None
+                    
+                # 提取关系数据
+                rel_data = dict(record["r"])
+                source_node = record["source"]
+                target_node = record["target"]
+                
+                # 添加源和目标ID
+                rel_data["source_id"] = source_node.get("id")
+                rel_data["target_id"] = target_node.get("id")
+                
+                # 处理特殊字段
+                for key, value in list(rel_data.items()):
+                    if isinstance(value, str) and key == "properties":
+                        try:
+                            rel_data[key] = json.loads(value)
+                        except:
+                            rel_data[key] = {}
+                
+                # 返回关系对象
+                return Relationship(**rel_data)
+        except Exception as e:
+            print(f"Error reading relationship: {e}")
+            return None
     async def read(self, id: UUID) -> Optional[T]:
         """读取实体或关系"""
         try:

@@ -45,7 +45,7 @@ async def read_relationship(
     db: Neo4jDatabase = Depends(get_db)
 ):
     """获取指定ID的关系"""
-    relationship = await db.read(relationship_id)
+    relationship = await db.read_relationship(relationship_id)
     if relationship is None:
         raise HTTPException(status_code=404, detail="Relationship not found")
     return relationship
@@ -58,6 +58,9 @@ async def update_relationship(
     db: Neo4jDatabase = Depends(get_db)
 ):
     """更新关系"""
+    # 确保ID匹配
+    if relationship.id != relationship_id:
+        relationship.id = relationship_id
     updated_relationship = await db.update(relationship_id, relationship)
     if updated_relationship is None:
         raise HTTPException(status_code=404, detail="Relationship not found")
