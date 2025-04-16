@@ -463,6 +463,49 @@
       </div>
     </div>
   </div>
+  <!-- 关系JSON编辑器模态框 -->
+  <div v-if="showRelationshipJsonModal" class="json-edit-modal">
+    <div class="json-edit-content">
+      <div class="json-edit-header">
+        <h3>编辑关系数据 (JSON)</h3>
+        <button @click="closeRelationshipJsonEditor" class="close-btn">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <div class="json-edit-body">
+        <div class="warning-message">
+          <i class="fas fa-exclamation-triangle"></i>
+          <span>高级功能：直接编辑JSON可能会导致数据不一致。请确保您了解关系数据结构。</span>
+        </div>
+        
+        <textarea 
+          v-model="relationshipJsonEditorContent" 
+          class="json-editor"
+          spellcheck="false"
+          placeholder="关系JSON数据"
+          rows="20"
+        ></textarea>
+        
+        <div v-if="relationshipJsonValidationError" class="json-validation-error">
+          <i class="fas fa-times-circle"></i>
+          <span>{{ relationshipJsonValidationError }}</span>
+        </div>
+      </div>
+      
+      <div class="json-edit-footer">
+        <button @click="formatRelationshipJson" class="format-btn">
+          <i class="fas fa-code"></i> 格式化JSON
+        </button>
+        <div class="right-actions">
+          <button @click="closeRelationshipJsonEditor" class="cancel-btn">取消</button>
+          <button @click="saveRelationshipJsonChanges" class="save-btn" :disabled="!!relationshipJsonValidationError">
+            <i class="fas fa-save"></i> 保存修改
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
   
   <script>
@@ -499,6 +542,10 @@
         showJsonModal: false,
         jsonEditorContent: '',
         jsonValidationError: null,
+        editingRelationship: null,
+        showRelationshipJsonModal: false,
+        relationshipJsonEditorContent: '',
+        relationshipJsonValidationError: null,
         newRelationship: {
           direction: 'outgoing',
           type: '',
@@ -1228,7 +1275,12 @@
           .enter().append('line')
           .attr('stroke', '#999')
           .attr('stroke-width', 1.5)
-          .attr('marker-end', d => `url(#arrow-${d.type})`);
+          .attr('marker-end', d => `url(#arrow-${d.type})`)
+          .style('cursor', 'pointer')  // 添加指针样式
+          .on('dblclick', (event, d) => {  // 添加双击事件
+            event.stopPropagation();
+            this.editRelationship(d);
+          });
         
         // Create link labels
         const linkLabel = g.append('g')
@@ -1580,7 +1632,133 @@
         this.searchResults = [];
         this.targetEntitySearch = '';
       },
+      async editRelationship(relationship) {
+        console.log('Edit relationship:', relationship);
+        
+        // 确保我们有关系ID
+        const relationshipId = typeof relationship.id === 'object' ? relationship.id.id : relationship.id;
+        
+        try {
+          // 从API获取完整的关系数据
+          const response = await fetch(`/api/v1/relationships/${relationshipId}`);
+          
+          if (!response.ok) {
+            throw new Error(`获取关系数据失败: ${response.status}`);
+          }
+          
+          // 获取完整的关系数据
+          const fullRelationshipData = await response.json();
+          console.log('Retrieved full relationship data:', fullRelationshipData);
+          
+          // 确保properties是对象
+          if (typeof fullRelationshipData.properties === 'string') {
+            try {
+              fullRelationshipData.properties = JSON.parse(fullRelationshipData.properties);
+            } catch (e) {
+              console.error('Error parsing properties string:', e);
+              fullRelationshipData.properties = {};
+            }
+          }
+          
+          // 保存正在编辑的关系
+          this.editingRelationship = fullRelationshipData;
+          
+          // 准备JSON编辑器内容
+          this.relationshipJsonEditorContent = JSON.stringify(fullRelationshipData, null, 2);
+          this.relationshipJsonValidationError = null;
+          
+          // 显示JSON编辑器模态框
+          this.showRelationshipJsonModal = true;
+          
+        } catch (error) {
+          console.error('Error fetching relationship details:', error);
+          
+          // 直接使用传入的关系数据作为备选
+          this.editingRelationship = relationship;
+          this.relationshipJsonEditorContent = JSON.stringify(relationship, null, 2);
+          this.relationshipJsonValidationError = null;
+          this.showRelationshipJsonModal = true;
+        }
+      },
 
+      // 格式化关系JSON
+      formatRelationshipJson() {
+        try {
+          // 解析当前JSON文本，然后重新格式化
+          const parsedJson = JSON.parse(this.relationshipJsonEditorContent);
+          this.relationshipJsonEditorContent = JSON.stringify(parsedJson, null, 2);
+          this.relationshipJsonValidationError = null;
+        } catch (e) {
+          this.relationshipJsonValidationError = 'JSON格式错误：' + e.message;
+        }
+      },
+
+      // 验证关系JSON
+      validateRelationshipJson() {
+        try {
+          JSON.parse(this.relationshipJsonEditorContent);
+          this.relationshipJsonValidationError = null;
+          return true;
+        } catch (e) {
+          this.relationshipJsonValidationError = 'JSON格式错误：' + e.message;
+          return false;
+        }
+      },
+
+      // 关闭关系JSON编辑器
+      closeRelationshipJsonEditor() {
+        this.showRelationshipJsonModal = false;
+        this.relationshipJsonEditorContent = '';
+        this.relationshipJsonValidationError = null;
+        this.editingRelationship = null;
+      },
+
+      // 保存关系JSON修改
+      async saveRelationshipJsonChanges() {
+        if (!this.validateRelationshipJson()) return;
+        
+        try {
+          // 解析用户编辑的JSON
+          const updatedRelationship = JSON.parse(this.relationshipJsonEditorContent);
+          
+          // 确保ID匹配当前选中的关系
+          if (updatedRelationship.id !== this.editingRelationship.id) {
+            if (!confirm('警告：关系ID已更改。这可能导致创建新关系而不是更新现有关系。是否继续？')) {
+              return;
+            }
+          }
+          
+          // 调用API更新关系
+          const response = await fetch(`/api/v1/relationships/${this.editingRelationship.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: this.relationshipJsonEditorContent // 直接使用编辑后的JSON文本
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`操作失败: ${response.status} - ${errorText}`);
+          }
+          
+          // 处理返回数据
+          const savedRelationship = await response.json();
+          console.log('关系保存成功:', savedRelationship);
+          
+          // 关闭编辑器
+          this.closeRelationshipJsonEditor();
+          
+          // 刷新图表
+          await this.fetchGraphData();
+          
+          // 通知用户
+          alert('关系数据已成功更新');
+        } catch (error) {
+          console.error('保存关系数据错误:', error);
+          alert('更新失败: ' + error.message);
+        }
+      },
       // Update your handleInputChange method if needed
       handleInputChange() {
         if (this.searchTimer) {
@@ -2443,8 +2621,13 @@
 
   .links line {
     stroke-opacity: 0.6;
+    cursor: pointer;
+    transition: stroke-opacity 0.2s, stroke-width 0.2s;
   }
-
+  .links line:hover {
+    stroke-opacity: 1;
+    stroke-width: 2.5px;
+  }
   .link-label {
     pointer-events: none;
   }

@@ -269,8 +269,169 @@ class Neo4jDatabase(DatabaseInterface[T]):
             import traceback
             traceback.print_exc()
             return None
-    
     async def update(self, id: UUID, obj: T) -> Optional[T]:
+        # 这段代码会添加到现有的 update 方法中，确保它能处理 Relationship 类型的对象
+        if isinstance(obj, Relationship):
+            # 获取关系ID，确保是字符串
+            rel_id = str(id)
+            print(f"Updating relationship with ID: {rel_id}")
+            
+            # 获取关系属性
+            rel_dict = obj.dict(exclude={"previous_version"})
+            
+            # 处理特殊字段
+            for key, value in list(rel_dict.items()):
+                if isinstance(value, (dict, list)):
+                    rel_dict[key] = json.dumps(value)
+                elif isinstance(value, UUID):
+                    rel_dict[key] = str(value)
+                elif key in ["created_at", "updated_at"] and hasattr(value, "isoformat"):
+                    rel_dict[key] = value.isoformat()
+            
+            # 设置更新时间
+            rel_dict["updated_at"] = datetime.now().isoformat()
+            
+            # 构建动态SET语句
+            set_statements = []
+            params = {"id": rel_id}
+            
+            for key, value in rel_dict.items():
+                if key not in ["id", "source_id", "target_id", "type"]:  # 跳过这些字段
+                    set_statements.append(f"r.{key} = ${key}")
+                    params[key] = value
+            
+            # 如果没有可更新的属性，直接返回原始对象
+            if not set_statements:
+                return obj
+            
+            # 构建Cypher查询
+            query = f"""
+            MATCH ()-[r]-()
+            WHERE r.id = $id
+            SET {", ".join(set_statements)}
+            RETURN r
+            """
+            
+            try:
+                async with self.driver.session(database=self.database) as session:
+                    result = await session.run(query, **params)
+                    record = await result.single()
+                    
+                    if record:
+                        print(f"Successfully updated relationship properties")
+                        return obj
+                    else:
+                        print(f"Warning: No record returned when updating relationship")
+                        return None
+            except Exception as e:
+                print(f"Error updating relationship: {e}")
+                return None
+        """更新实体或关系"""
+        try:
+            # 确保ID是字符串
+            entity_id = str(id)
+            print(f"Updating entity with ID: {entity_id}")
+            
+            # 获取实体属性（排除某些内部字段）
+            entity_dict = obj.dict(exclude={"previous_version"})
+            
+            # 处理特殊字段（如properties, tags等）
+            for key, value in list(entity_dict.items()):
+                # 如果是字典或列表类型，转换为JSON字符串
+                if isinstance(value, (dict, list)):
+                    entity_dict[key] = json.dumps(value)
+                # 如果是UUID类型，转换为字符串
+                elif isinstance(value, UUID):
+                    entity_dict[key] = str(value)
+                # 如果是datetime类型，转换为ISO格式字符串
+                elif key in ["created_at", "updated_at"] and hasattr(value, "isoformat"):
+                    entity_dict[key] = value.isoformat()
+            
+            # 设置更新时间
+            entity_dict["updated_at"] = datetime.now().isoformat()
+            
+            # 构建动态SET语句
+            set_statements = []
+            params = {"id": entity_id}
+            
+            for key, value in entity_dict.items():
+                if key != "id":  # 跳过ID字段
+                    set_statements.append(f"e.{key} = ${key}")
+                    params[key] = value
+            
+            # 如果没有可更新的属性，直接返回原始对象
+            if not set_statements:
+                return obj
+            
+            # 构建Cypher查询
+            query = f"""
+            MATCH (e)
+            WHERE toString(e.id) = $id
+            SET {", ".join(set_statements)}
+            RETURN e
+            """
+            
+            async with self.driver.session(database=self.database) as session:
+                # 执行属性更新
+                result = await session.run(query, **params)
+                record = await result.single()
+                
+                if record:
+                    print(f"Successfully updated entity properties")
+                else:
+                    print(f"Warning: No record returned when updating entity properties")
+                
+                # 如果更新包含类型变更，更新节点标签
+                if "type" in entity_dict and entity_dict["type"]:
+                    type_value = entity_dict["type"]
+                    
+                    try:
+                        # 首先获取当前节点的所有标签
+                        labels_query = """
+                        MATCH (e)
+                        WHERE toString(e.id) = $id
+                        RETURN labels(e) AS labels
+                        """
+                        
+                        labels_result = await session.run(labels_query, id=entity_id)
+                        labels_record = await labels_result.single()
+                        
+                        if labels_record:
+                            current_labels = labels_record["labels"]
+                            
+                            # 移除除"Entity"和新类型外的所有标签
+                            for label in current_labels:
+                                if label != "Entity" and label != type_value:
+                                    remove_query = f"""
+                                    MATCH (e)
+                                    WHERE toString(e.id) = $id
+                                    REMOVE e:{label}
+                                    """
+                                    await session.run(remove_query, id=entity_id)
+                                    print(f"Removed old type label: {label}")
+                        
+                        # 添加新类型标签
+                        add_label_query = f"""
+                        MATCH (e)
+                        WHERE toString(e.id) = $id
+                        SET e:{type_value}
+                        RETURN e
+                        """
+                        
+                        await session.run(add_label_query, id=entity_id)
+                        print(f"Added new type label: {type_value}")
+                    except Exception as type_error:
+                        print(f"Error updating entity type: {type_error}")
+            
+            # 直接返回原始对象
+            return obj
+                
+        except Exception as e:
+            print(f"Error in update method: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    async def update_bak(self, id: UUID, obj: T) -> Optional[T]:
         """更新实体或关系"""
         try:
             # Ensure the ID is a string
