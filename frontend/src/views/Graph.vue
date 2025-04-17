@@ -1733,8 +1733,8 @@
           const updatedRelationship = JSON.parse(this.relationshipJsonEditorContent);
           
           // 检查是否是原始Neo4j数据结构
-          const isRawData = updatedRelationship.hasOwnProperty('identity') || 
-                            updatedRelationship.hasOwnProperty('elementId');
+          const isRawData = Object.prototype.hasOwnProperty.call(updatedRelationship, 'identity') || 
+                            Object.prototype.hasOwnProperty.call(updatedRelationship, 'elementId');
                             
           let apiRelationship;
           
@@ -1762,7 +1762,15 @@
             },
             body: JSON.stringify(apiRelationship)
           });
-          
+          if (response.ok) {
+            // Handle success
+            this.closeRelationshipJsonEditor();
+            alert('关系更新成功');
+          } else {
+            // Handle error
+            const errorText = await response.text();
+            throw new Error(`更新失败: ${response.status} - ${errorText}`);
+          }
           // 处理结果...
         } catch (error) {
           // 错误处理...
