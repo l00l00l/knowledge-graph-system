@@ -1291,7 +1291,12 @@
           .attr('class', 'link-label')
           .attr('font-size', '8px')
           .attr('fill', '#666')
-          .text(d => d.type);
+          .text(d => d.type)
+          .style('cursor', 'pointer')  // 添加指针样式
+          .on('dblclick', (event, d) => {  // 添加双击事件
+            event.stopPropagation();
+            this.editRelationship(d);
+          });
         
         // Create nodes
         const node = g.append('g')
