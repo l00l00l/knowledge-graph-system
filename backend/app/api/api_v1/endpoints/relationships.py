@@ -1,5 +1,5 @@
 # 文件: app/api/api_v1/endpoints/relationships.py
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from app.models.relationships.relationship import Relationship
@@ -100,3 +100,37 @@ async def trace_relationship_knowledge(
     
     return traces
 
+@router.get("/{relationship_id}/raw", response_model=Dict[str, Any])
+async def read_relationship_raw(
+    relationship_id: UUID,
+    db: Neo4jDatabase = Depends(get_db)
+):
+    """获取指定ID的关系原始数据"""
+    try:
+        rel_id = str(relationship_id)
+        
+        # 直接查询Neo4j获取原始关系数据
+        query = """
+        MATCH ()-[r]-()
+        WHERE r.id = $id
+        RETURN r
+        """
+        
+        async with db.driver.session(database=db.database) as session:
+            result = await session.run(query, id=rel_id)
+            record = await result.single()
+            
+            if not record:
+                raise HTTPException(status_code=404, detail="Relationship not found")
+                
+            # 直接返回Neo4j记录的原始数据
+            relationship = record["r"]
+            raw_data = dict(relationship)
+            
+            # 增加关键信息方便前端使用
+            if hasattr(relationship, "id"):
+                raw_data["id"] = relationship.id
+            
+            return raw_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching raw relationship: {str(e)}")

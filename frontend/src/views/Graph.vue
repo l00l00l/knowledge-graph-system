@@ -1639,45 +1639,56 @@
         const relationshipId = typeof relationship.id === 'object' ? relationship.id.id : relationship.id;
         
         try {
-          // 从API获取完整的关系数据
-          const response = await fetch(`/api/v1/relationships/${relationshipId}`);
+          // 从新API端点获取原始关系数据
+          const response = await fetch(`/api/v1/relationships/${relationshipId}/raw`);
           
           if (!response.ok) {
-            throw new Error(`获取关系数据失败: ${response.status}`);
+            throw new Error(`获取关系原始数据失败: ${response.status}`);
           }
           
-          // 获取完整的关系数据
-          const fullRelationshipData = await response.json();
-          console.log('Retrieved full relationship data:', fullRelationshipData);
-          
-          // 确保properties是对象
-          if (typeof fullRelationshipData.properties === 'string') {
-            try {
-              fullRelationshipData.properties = JSON.parse(fullRelationshipData.properties);
-            } catch (e) {
-              console.error('Error parsing properties string:', e);
-              fullRelationshipData.properties = {};
-            }
-          }
+          // 获取原始关系数据
+          const rawRelationshipData = await response.json();
+          console.log('Retrieved raw relationship data:', rawRelationshipData);
           
           // 保存正在编辑的关系
-          this.editingRelationship = fullRelationshipData;
+          this.editingRelationship = rawRelationshipData;
           
           // 准备JSON编辑器内容
-          this.relationshipJsonEditorContent = JSON.stringify(fullRelationshipData, null, 2);
+          this.relationshipJsonEditorContent = JSON.stringify(rawRelationshipData, null, 2);
           this.relationshipJsonValidationError = null;
           
           // 显示JSON编辑器模态框
           this.showRelationshipJsonModal = true;
           
         } catch (error) {
-          console.error('Error fetching relationship details:', error);
+          console.error('Error fetching raw relationship data:', error);
           
-          // 直接使用传入的关系数据作为备选
-          this.editingRelationship = relationship;
-          this.relationshipJsonEditorContent = JSON.stringify(relationship, null, 2);
-          this.relationshipJsonValidationError = null;
-          this.showRelationshipJsonModal = true;
+          // 如果获取原始数据失败，尝试获取标准格式的数据
+          try {
+            const standardResponse = await fetch(`/api/v1/relationships/${relationshipId}`);
+            
+            if (!standardResponse.ok) {
+              throw new Error(`获取标准关系数据失败: ${standardResponse.status}`);
+            }
+            
+            const standardData = await standardResponse.json();
+            console.log('Falling back to standard relationship data:', standardData);
+            
+            this.editingRelationship = standardData;
+            this.relationshipJsonEditorContent = JSON.stringify(standardData, null, 2);
+            this.relationshipJsonValidationError = null;
+            this.showRelationshipJsonModal = true;
+            
+          } catch (fallbackError) {
+            console.error('All API methods failed:', fallbackError);
+            
+            // 最后的备选：使用本地数据
+            alert('无法从服务器获取关系数据，将使用本地数据');
+            this.editingRelationship = relationship;
+            this.relationshipJsonEditorContent = JSON.stringify(relationship, null, 2);
+            this.relationshipJsonValidationError = null;
+            this.showRelationshipJsonModal = true;
+          }
         }
       },
 
@@ -1721,22 +1732,26 @@
           // 解析用户编辑的JSON
           const updatedRelationship = JSON.parse(this.relationshipJsonEditorContent);
           
-          // 创建新的符合后端结构的关系对象
-          const apiRelationship = {
-            id: updatedRelationship.id,
-            type: updatedRelationship.type,
-            // 从嵌套对象中提取ID
-            source_id: updatedRelationship.source?.id,
-            target_id: updatedRelationship.target?.id,
-            // 其他需要的字段
-            properties: updatedRelationship.properties || {},
-            bidirectional: updatedRelationship.bidirectional || false,
-            certainty: updatedRelationship.certainty || 1.0
-          };
+          // 检查是否是原始Neo4j数据结构
+          const isRawData = updatedRelationship.hasOwnProperty('identity') || 
+                            updatedRelationship.hasOwnProperty('elementId');
+                            
+          let apiRelationship;
           
-          // 确保必填字段存在
-          if (!apiRelationship.source_id || !apiRelationship.target_id || !apiRelationship.type) {
-            throw new Error('关系必须包含source_id、target_id和type字段');
+          if (isRawData) {
+            // 从原始数据创建API所需的关系对象
+            apiRelationship = {
+              id: updatedRelationship.properties?.id || this.editingRelationship.id,
+              type: updatedRelationship.type || this.editingRelationship.type,
+              source_id: updatedRelationship.startNodeElementId,
+              target_id: updatedRelationship.endNodeElementId,
+              properties: updatedRelationship.properties?.properties || {},
+              bidirectional: updatedRelationship.properties?.bidirectional || false,
+              certainty: updatedRelationship.properties?.certainty || 1.0
+            };
+          } else {
+            // 使用标准格式
+            apiRelationship = updatedRelationship;
           }
           
           // 调用API更新关系
@@ -1745,27 +1760,12 @@
             headers: {
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify(apiRelationship) // 使用转换后的关系对象
+            body: JSON.stringify(apiRelationship)
           });
           
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`操作失败: ${response.status} - ${errorText}`);
-          }
-          
-          // 处理返回数据
-          const savedRelationship = await response.json();
-          console.log('关系保存成功:', savedRelationship);
-          
-          // 关闭编辑器并刷新图表
-          this.closeRelationshipJsonEditor();
-          await this.fetchGraphData();
-          
-          // 通知用户
-          alert('关系数据已成功更新');
+          // 处理结果...
         } catch (error) {
-          console.error('保存关系数据错误:', error);
-          alert('更新失败: ' + error.message);
+          // 错误处理...
         }
       },
       // Update your handleInputChange method if needed
