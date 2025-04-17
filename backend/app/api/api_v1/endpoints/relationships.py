@@ -109,11 +109,21 @@ async def read_relationship_raw(
     try:
         rel_id = str(relationship_id)
         
-        # 直接查询Neo4j获取原始关系数据
+        # 使用单一查询获取完整的关系信息
         query = """
-        MATCH ()-[r]-()
+        MATCH (source)-[r]->(target)
         WHERE r.id = $id
-        RETURN r
+        WITH r, source, target
+        RETURN {
+          identity: id(r),
+          type: type(r),
+          start: id(source),
+          end: id(target),
+          elementId: toString(id(r)),
+          startNodeElementId: toString(id(source)),
+          endNodeElementId: toString(id(target)),
+          properties: r
+        } as completeRelationship
         """
         
         async with db.driver.session(database=db.database) as session:
@@ -122,15 +132,22 @@ async def read_relationship_raw(
             
             if not record:
                 raise HTTPException(status_code=404, detail="Relationship not found")
-                
-            # 直接返回Neo4j记录的原始数据
-            relationship = record["r"]
-            raw_data = dict(relationship)
             
-            # 增加关键信息方便前端使用
-            if hasattr(relationship, "id"):
-                raw_data["id"] = relationship.id
+            # 直接从Cypher查询结果中获取完整的数据结构
+            complete_data = record["completeRelationship"]
+            #print(f"Complete relationship data from query: {complete_data}")
             
-            return raw_data
+            # 进行必要的后处理，确保数据格式正确
+            if isinstance(complete_data, dict):
+                # 确保properties属性存在
+                if "properties" in complete_data and hasattr(complete_data["properties"], "keys"):
+                    # 将Neo4j关系对象转换为字典
+                    properties = dict(complete_data["properties"])
+                    complete_data["properties"] = properties
+            
+            return complete_data
+            
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error fetching raw relationship: {str(e)}")

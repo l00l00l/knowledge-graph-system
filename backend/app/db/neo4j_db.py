@@ -155,7 +155,7 @@ class Neo4jDatabase(DatabaseInterface[T]):
             
             query = """
             MATCH ()-[r]-()
-            WHERE r.id = $id
+            WHERE r.id.id = $id
             RETURN r, startNode(r) as source, endNode(r) as target
             """
             
