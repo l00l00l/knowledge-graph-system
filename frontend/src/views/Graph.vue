@@ -1721,11 +1721,22 @@
           // 解析用户编辑的JSON
           const updatedRelationship = JSON.parse(this.relationshipJsonEditorContent);
           
-          // 确保ID匹配当前选中的关系
-          if (updatedRelationship.id !== this.editingRelationship.id) {
-            if (!confirm('警告：关系ID已更改。这可能导致创建新关系而不是更新现有关系。是否继续？')) {
-              return;
-            }
+          // 创建新的符合后端结构的关系对象
+          const apiRelationship = {
+            id: updatedRelationship.id,
+            type: updatedRelationship.type,
+            // 从嵌套对象中提取ID
+            source_id: updatedRelationship.source?.id,
+            target_id: updatedRelationship.target?.id,
+            // 其他需要的字段
+            properties: updatedRelationship.properties || {},
+            bidirectional: updatedRelationship.bidirectional || false,
+            certainty: updatedRelationship.certainty || 1.0
+          };
+          
+          // 确保必填字段存在
+          if (!apiRelationship.source_id || !apiRelationship.target_id || !apiRelationship.type) {
+            throw new Error('关系必须包含source_id、target_id和type字段');
           }
           
           // 调用API更新关系
@@ -1734,7 +1745,7 @@
             headers: {
               'Content-Type': 'application/json'
             },
-            body: this.relationshipJsonEditorContent // 直接使用编辑后的JSON文本
+            body: JSON.stringify(apiRelationship) // 使用转换后的关系对象
           });
           
           if (!response.ok) {
@@ -1746,10 +1757,8 @@
           const savedRelationship = await response.json();
           console.log('关系保存成功:', savedRelationship);
           
-          // 关闭编辑器
+          // 关闭编辑器并刷新图表
           this.closeRelationshipJsonEditor();
-          
-          // 刷新图表
           await this.fetchGraphData();
           
           // 通知用户
