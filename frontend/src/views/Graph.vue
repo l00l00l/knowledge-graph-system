@@ -1725,55 +1725,56 @@
       },
 
       // 保存关系JSON修改
+      // 保存关系JSON修改
       async saveRelationshipJsonChanges() {
         if (!this.validateRelationshipJson()) return;
         
         try {
           // 解析用户编辑的JSON
           const updatedRelationship = JSON.parse(this.relationshipJsonEditorContent);
+          console.log("编辑后的关系数据:", updatedRelationship);
           
-          // 检查是否是原始Neo4j数据结构
-          const isRawData = Object.prototype.hasOwnProperty.call(updatedRelationship, 'identity') || 
-                            Object.prototype.hasOwnProperty.call(updatedRelationship, 'elementId');
-                            
-          let apiRelationship;
+          // 确定关系ID - 关键部分
+          let relationshipId;
           
-          if (isRawData) {
-            // 从原始数据创建API所需的关系对象
-            apiRelationship = {
-              id: updatedRelationship.properties?.id || this.editingRelationship.id,
-              type: updatedRelationship.type || this.editingRelationship.type,
-              source_id: updatedRelationship.startNodeElementId,
-              target_id: updatedRelationship.endNodeElementId,
-              properties: updatedRelationship.properties?.properties || {},
-              bidirectional: updatedRelationship.properties?.bidirectional || false,
-              certainty: updatedRelationship.properties?.certainty || 1.0
-            };
-          } else {
-            // 使用标准格式
-            apiRelationship = updatedRelationship;
+          // 优先使用properties中的id
+          if (updatedRelationship.properties && updatedRelationship.properties.id) {
+            relationshipId = updatedRelationship.properties.id;
+          } 
+          // 备选方案：使用原始编辑的关系对象中的ID
+          else if (this.editingRelationship && this.editingRelationship.properties && this.editingRelationship.properties.id) {
+            relationshipId = this.editingRelationship.properties.id;
           }
           
-          // 调用API更新关系
-          const response = await fetch(`/api/v1/relationships/${this.editingRelationship.id}`, {
+          console.log(`将使用关系ID: ${relationshipId}`);
+          
+          if (!relationshipId) {
+            throw new Error('无法确定关系ID，无法更新关系');
+          }
+          
+          // 直接使用后端raw接口更新完整关系数据
+          const response = await fetch(`/api/v1/relationships/${relationshipId}/raw-update`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify(apiRelationship)
+            body: this.relationshipJsonEditorContent // 直接发送完整的JSON
           });
-          if (response.ok) {
-            // Handle success
-            this.closeRelationshipJsonEditor();
-            alert('关系更新成功');
-          } else {
-            // Handle error
+          
+          if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`更新失败: ${response.status} - ${errorText}`);
           }
-          // 处理结果...
+          
+          // 成功处理
+          this.closeRelationshipJsonEditor();
+          alert('关系更新成功！');
+          
+          // 刷新图数据
+          await this.fetchGraphData();
         } catch (error) {
-          // 错误处理...
+          console.error('保存关系数据错误:', error);
+          alert('保存失败: \n' + error.message);
         }
       },
       // Update your handleInputChange method if needed
