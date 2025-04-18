@@ -235,6 +235,51 @@
       </div>
     </div>
   </div>
+  <!-- 在Documents.vue模板中添加 -->
+  <document-uploader @entity-created="handleEntityCreated" />
+
+  <!-- 实体JSON编辑器模态框 -->
+  <div v-if="showEntityModal" class="json-edit-modal">
+    <div class="json-edit-content">
+      <div class="json-edit-header">
+        <h3>编辑文档实体数据</h3>
+        <button @click="closeEntityModal" class="close-btn">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <div class="json-edit-body">
+        <div class="warning-message">
+          <i class="fas fa-exclamation-triangle"></i>
+          <span>您正在编辑为文档创建的实体数据。</span>
+        </div>
+        
+        <textarea 
+          v-model="entityJsonContent" 
+          class="json-editor"
+          spellcheck="false"
+          rows="20"
+        ></textarea>
+        
+        <div v-if="jsonValidationError" class="json-validation-error">
+          <i class="fas fa-times-circle"></i>
+          <span>{{ jsonValidationError }}</span>
+        </div>
+      </div>
+      
+      <div class="json-edit-footer">
+        <button @click="formatEntityJson" class="format-btn">
+          <i class="fas fa-code"></i> 格式化JSON
+        </button>
+        <div class="right-actions">
+          <button @click="closeEntityModal" class="cancel-btn">取消</button>
+          <button @click="saveEntityChanges" class="save-btn" :disabled="!!jsonValidationError">
+            <i class="fas fa-save"></i> 保存修改
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
@@ -269,7 +314,11 @@ export default {
       showExtractProgress: false,
       extractingDocument: null,
       isExtracting: false,
-      hasShownFetchError: false
+      hasShownFetchError: false,
+      showEntityModal: false,
+      editingEntity: null,
+      entityJsonContent: '',
+      jsonValidationError: null
     };
   },
   computed: {
@@ -386,6 +435,15 @@ export default {
             body: formData
           });
           
+          if (response.ok) {
+            const result = await response.json();
+            
+            // 检查是否包含实体信息
+            if (result.entity) {
+              // 发出事件，通知父组件处理实体编辑
+              this.$emit('entity-created', result.entity);
+            }
+          }
           if (!response.ok) {
             throw new Error(`上传失败：${response.status} ${response.statusText}`);
           }
@@ -617,7 +675,73 @@ export default {
       
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     },
+    // 处理新创建的实体
+    handleEntityCreated(entity) {
+      this.editingEntity = entity;
+      this.entityJsonContent = JSON.stringify(entity, null, 2);
+      this.showEntityModal = true;
+    },
+     // 格式化JSON
+    formatEntityJson() {
+      try {
+        const parsed = JSON.parse(this.entityJsonContent);
+        this.entityJsonContent = JSON.stringify(parsed, null, 2);
+        this.jsonValidationError = null;
+      } catch (e) {
+        this.jsonValidationError = 'JSON格式错误：' + e.message;
+      }
+    },
+
+    // 验证JSON
+    validateEntityJson() {
+      try {
+        JSON.parse(this.entityJsonContent);
+        this.jsonValidationError = null;
+        return true;
+      } catch (e) {
+        this.jsonValidationError = 'JSON格式错误：' + e.message;
+        return false;
+      }
+    },
+
+    // 保存实体修改
+    async saveEntityChanges() {
+      if (!this.validateEntityJson()) return;
+      
+      try {
+        const updatedEntity = JSON.parse(this.entityJsonContent);
+        
+        const response = await fetch(`/api/v1/entities/${updatedEntity.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: this.entityJsonContent
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`操作失败: ${response.status} - ${errorText}`);
+        }
+        
+        const savedEntity = await response.json();
+        console.log('实体保存成功:', savedEntity);
+        
+        this.closeEntityModal();
+        alert('实体数据已成功更新');
+      } catch (error) {
+        console.error('保存实体数据错误:', error);
+        alert('更新失败: ' + error.message);
+      }
+    },
     
+    // 关闭编辑模态框
+    closeEntityModal() {
+      this.showEntityModal = false;
+      this.editingEntity = null;
+      this.entityJsonContent = '';
+      this.jsonValidationError = null;
+    },
     formatDate(dateString) {
       if (!dateString) return '';
       try {
