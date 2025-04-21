@@ -153,9 +153,13 @@ async def upload_document(
             except Exception as e:
                 extract_error = str(e)
                 print(f"Error during knowledge extraction: {e}")
+
+        # 将文档转为字典以便序列化
+        document_dict = doc_model.to_dict()
         # 在upload_document函数中添加创建基本实体的部分
         if not extract_knowledge:
             # 创建一个实体对象，注意避免使用与类名相同的变量名
+            
             new_entity = Entity(
                 id=uuid4(),
                 type="concept",
@@ -194,8 +198,7 @@ async def upload_document(
             except Exception as e:
                 print(f"Error creating document entity: {e}")
         # 继续返回原始响应
-        # 将文档转为字典以便序列化
-        document_dict = doc_model.to_dict()
+        
         
         return {
             "document": document_dict,

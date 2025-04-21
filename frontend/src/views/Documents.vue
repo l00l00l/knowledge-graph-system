@@ -236,21 +236,31 @@
       </div>
     </div>
   </div>
-  <!-- 在Documents.vue模板中添加 -->
-  <!-- 实体JSON编辑器模态框 -->
+  <!-- 实体JSON编辑器模态框 - 确保这段代码存在于 Documents.vue 中 -->
   <div v-if="showEntityModal" class="json-edit-modal">
     <div class="json-edit-content">
       <div class="json-edit-header">
-        <h3>编辑文档实体数据</h3>
+        <h3>编辑新创建的文档实体</h3>
         <button @click="closeEntityModal" class="close-btn">
           <i class="fas fa-times"></i>
         </button>
       </div>
       
       <div class="json-edit-body">
-        <div class="warning-message">
-          <i class="fas fa-exclamation-triangle"></i>
-          <span>您正在编辑为文档创建的实体数据。</span>
+        <div class="entity-info-box">
+          <div class="entity-info-item">
+            <span class="label">文档:</span>
+            <span class="value">{{ editingEntity?.name || '未命名' }}</span>
+          </div>
+          <div class="entity-info-item">
+            <span class="label">类型:</span>
+            <span class="value">{{ getEntityTypeName(editingEntity?.type) || '概念' }}</span>
+          </div>
+        </div>
+        
+        <div class="entity-edit-message">
+          <i class="fas fa-info-circle"></i>
+          <span>您可以编辑这个由文档自动创建的实体，修改其属性、标签等信息。</span>
         </div>
         
         <textarea 
@@ -258,6 +268,7 @@
           class="json-editor"
           spellcheck="false"
           rows="20"
+          placeholder="实体JSON数据"
         ></textarea>
         
         <div v-if="jsonValidationError" class="json-validation-error">
@@ -271,7 +282,7 @@
           <i class="fas fa-code"></i> 格式化JSON
         </button>
         <div class="right-actions">
-          <button @click="closeEntityModal" class="cancel-btn">取消</button>
+          <button @click="closeEntityModal" class="cancel-btn">关闭</button>
           <button @click="saveEntityChanges" class="save-btn" :disabled="!!jsonValidationError">
             <i class="fas fa-save"></i> 保存修改
           </button>
@@ -433,22 +444,11 @@ export default {
             method: 'POST',
             body: formData
           });
-          
-          if (response.ok) {
-            const result = await response.json();
-            
-            // 检查是否包含实体信息
-            if (result.entity) {
-              // 发出事件，通知父组件处理实体编辑
-              this.$emit('entity-created', result.entity);
-            }
-          }
           if (!response.ok) {
             throw new Error(`上传失败：${response.status} ${response.statusText}`);
           }
-          
           const result = await response.json();
-          
+               
           // 添加上传的文件到文档列表
           if (result.document) {
             // 确保document.id是字符串类型
@@ -461,8 +461,21 @@ export default {
             uploadedFiles.push(result.document);
             console.log(`文件 ${file.name} 已存储在:`, result.document.file_path || result.document.archived_path);
             console.log('Upload completed, forcing document list refresh');
-            this.documents = []; // 清空当前列表
-            await this.fetchDocuments(); // 重新获取
+            // 检查是否包含实体信息并显示编辑器
+            // 重要：无论是否勾选提取知识，只要返回了实体，就打开编辑器
+            if (result.entity) {
+              console.log('Entity detected in upload response, opening editor:', result.entity);
+              
+              // 设置实体数据
+              this.editingEntity = result.entity;
+              this.entityJsonContent = JSON.stringify(result.entity, null, 2);
+              this.showEntityModal = true;
+            } else {
+              console.log('No entity data in upload response');
+            }
+
+            //this.documents = []; // 清空当前列表
+            //await this.fetchDocuments(); // 重新获取
           }
         } catch (error) {
           console.error(`文件 ${file.name} 上传错误:`, error);
@@ -574,7 +587,31 @@ export default {
       this.previewingDocument = null;
       this.documentContent = '';
     },
-    
+    // 获取实体类型的中文名称
+    getEntityTypeName(typeCode) {
+      // 静态实体类型映射表
+      const typeMap = {
+        'concept': '概念',
+        'person': '人物',
+        'organization': '组织',
+        'location': '地点',
+        'time': '时间',
+        'event': '事件',
+        'technology': '技术',
+        'theory': '理论',
+        'method': '方法',
+        'problem': '问题',
+        'tool': '工具',
+        'solution': '解决方案',
+        'note': '笔记',
+        'question': '问题',
+        'idea': '想法',
+        'goal': '目标',
+        'plan': '计划'
+      };
+      
+      return typeMap[typeCode] || typeCode || '未知类型';
+    },
     // Knowledge extraction
     async extractFromDocument(doc) {
       if (this.isExtracting) return;
@@ -1404,5 +1441,178 @@ h2 {
 .binary-preview p {
   margin-bottom: 20px;
   font-size: 1.1rem;
+}
+
+.json-edit-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+}
+
+.json-edit-content {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 800px;
+  max-width: 90%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.json-edit-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.json-edit-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.entity-info-box {
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.entity-info-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.entity-info-item .label {
+  font-weight: 500;
+  color: #666;
+}
+
+.entity-info-item .value {
+  font-weight: 600;
+  color: #333;
+}
+
+.entity-edit-message {
+  background-color: #e3f2fd;
+  color: #0277bd;
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.entity-edit-message i {
+  font-size: 1.2em;
+}
+
+.json-editor {
+  width: 100%;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 14px;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+  color: #333;
+  resize: vertical;
+  min-height: 300px;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
+.json-validation-error {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.json-edit-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.format-btn {
+  background-color: #e9ecef;
+  color: #495057;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.format-btn:hover {
+  background-color: #dde2e6;
+}
+
+.right-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.cancel-btn {
+  padding: 8px 16px;
+  background-color: #f5f5f5;
+  color: #333;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.save-btn {
+  padding: 8px 16px;
+  background-color: var(--primary-color, #4a90e2);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.save-btn:disabled {
+  background-color: #aaa;
+  cursor: not-allowed;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #666;
+}
+
+.close-btn:hover {
+  color: #333;
 }
 </style>
