@@ -506,6 +506,52 @@
       </div>
     </div>
   </div>
+  <!-- 添加到 Graph.vue 的 template 部分末尾，与其他模态框并列 -->
+
+  <!-- 文档预览模态框 -->
+  <div v-if="showDocumentPreview" class="preview-dialog">
+    <div class="preview-content">
+      <div class="preview-header">
+        <h3>{{ previewingDocument?.title || '文档预览' }}</h3>
+        <button @click="closeDocumentPreview" class="close-btn">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="preview-body">
+        <div v-if="previewLoading" class="preview-loading">
+          <i class="fas fa-spinner fa-spin"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="previewError" class="preview-error">
+          <i class="fas fa-exclamation-circle"></i>
+          <span>{{ previewError }}</span>
+        </div>
+        <div v-else-if="previewingDocument && previewingDocument.type && previewingDocument.type.toLowerCase() === 'pdf'" class="pdf-preview">
+          <div class="pdf-content">
+            <pre class="content-preview">{{ documentContent }}</pre>
+          </div>
+          <div class="pdf-footer">
+            <p>PDF预览可能不完整。要查看完整内容，请下载文件。</p>
+          </div>
+        </div>
+        <div v-else-if="previewingDocument && previewingDocument.type && ['docx', 'doc'].includes(previewingDocument.type.toLowerCase())" class="word-preview">
+          <div class="word-content">
+            <pre class="content-preview">{{ documentContent }}</pre>
+          </div>
+          <div class="word-footer">
+            <p>Word预览可能不完整。要查看完整格式，请下载文件。</p>
+          </div>
+        </div>
+        <pre v-else class="content-preview">{{ documentContent }}</pre>
+      </div>
+      <div class="preview-footer">
+        <button @click="closeDocumentPreview" class="btn">关闭</button>
+        <button @click="downloadDocument" v-if="previewingDocument" class="btn btn-primary">
+          <i class="fas fa-download"></i> 下载
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
   
   <script>
@@ -546,6 +592,13 @@
         showRelationshipJsonModal: false,
         relationshipJsonEditorContent: '',
         relationshipJsonValidationError: null,
+        // 添加溯源和文档预览相关属性
+        isTracing: false,              // 溯源加载状态
+        showDocumentPreview: false,    // 控制文档预览模态框显示
+        previewingDocument: null,      // 当前预览的文档
+        previewLoading: false,         // 文档预览加载状态
+        documentContent: '',           // 文档内容
+        previewError: null, 
         newRelationship: {
           direction: 'outgoing',
           type: '',
@@ -1094,11 +1147,97 @@
         console.log('Saved original relationships:', this.originalRelationships);
       },
             
-      traceKnowledge() {
-        console.log('Trace knowledge for:', this.selectedEntity);
-        // In a real app, this would navigate to a knowledge trace page
+      async traceKnowledge() {
+        if (!this.selectedEntity) return;
+        
+        console.log('Tracing knowledge source for entity:', this.selectedEntity.name);
+        
+        try {
+          // 添加加载状态
+          this.isTracing = true;
+          
+          // 获取实体关联的源文档
+          const response = await fetch(`/api/v1/entities/${this.selectedEntity.id}/trace`);
+          
+          if (!response.ok) {
+            throw new Error(`获取溯源信息失败: ${response.status}`);
+          }
+          
+          const traces = await response.json();
+          console.log('Knowledge traces:', traces);
+          
+          // 检查是否有溯源记录
+          if (!traces || traces.length === 0) {
+            alert('未找到该实体的溯源信息');
+            return;
+          }
+          
+          // 取第一条溯源记录，获取文档ID
+          const firstTrace = traces[0];
+          const documentId = firstTrace.document_id;
+          
+          if (!documentId) {
+            alert('溯源记录中未包含文档信息');
+            return;
+          }
+          
+          // 使用文档ID预览文档
+          await this.previewSourceDocument(documentId);
+          
+        } catch (error) {
+          console.error('Error tracing knowledge:', error);
+          alert('获取溯源信息失败: ' + error.message);
+        } finally {
+          this.isTracing = false;
+        }
       },
-      
+      // 添加文档预览方法
+      async previewSourceDocument(documentId) {
+        try {
+          // 设置预览状态
+          this.showDocumentPreview = true;
+          this.previewLoading = true;
+          this.documentContent = '';
+          this.previewError = null;
+          
+          // 获取文档信息
+          const docResponse = await fetch(`/api/v1/documents/${documentId}`);
+          
+          if (!docResponse.ok) {
+            throw new Error(`获取文档信息失败: ${docResponse.status}`);
+          }
+          
+          const document = await docResponse.json();
+          this.previewingDocument = document;
+          
+          // 获取文档预览内容
+          const previewResponse = await fetch(`/api/v1/documents/${documentId}/preview`);
+          
+          if (!previewResponse.ok) {
+            throw new Error(`预览失败: ${previewResponse.status}`);
+          }
+          
+          const result = await previewResponse.json();
+          
+          if (result.preview_available) {
+            this.documentContent = result.content || '(无内容)';
+          } else {
+            throw new Error('无法预览此类型的文档');
+          }
+        } catch (error) {
+          console.error('预览文档失败:', error);
+          this.previewError = error.message;
+        } finally {
+          this.previewLoading = false;
+        }
+      },
+
+      // 关闭文档预览模态框
+      closeDocumentPreview() {
+        this.showDocumentPreview = false;
+        this.previewingDocument = null;
+        this.documentContent = '';
+      },
       exploreContext() {
         console.log('Explore context for:', this.selectedEntity);
         // In a real app, this might expand the graph visualization
@@ -2119,6 +2258,19 @@
         this.editingEntity = null;
       },
 
+      // 下载文档方法
+      downloadDocument() {
+        if (!this.previewingDocument || !this.previewingDocument.id) {
+          console.error('No document available for download');
+          return;
+        }
+        
+        // 创建下载链接
+        const downloadUrl = `/api/v1/documents/${this.previewingDocument.id}/download`;
+        
+        // 打开新窗口下载文件
+        window.open(downloadUrl, '_blank');
+      },
       // 添加实体属性
       addEntityProperty() {
         // 使用 nextTick 确保 DOM 已更新
@@ -3722,4 +3874,110 @@
     background-color: #dde2e6;
   }
 
+  .preview-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1200; /* 确保在其他模态框之上 */
+  }
+
+  .preview-content {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    width: 80%;
+    max-width: 900px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .preview-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .preview-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+
+  .preview-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    min-height: 200px;
+    max-height: 60vh;
+  }
+
+  .content-preview {
+    white-space: pre-wrap;
+    font-family: monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    overflow-x: auto;
+  }
+
+  .preview-loading,
+  .preview-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 200px;
+    color: #999;
+  }
+
+  .preview-loading i,
+  .preview-error i {
+    font-size: 2rem;
+    margin-bottom: 10px;
+  }
+
+  .preview-error {
+    color: #d9534f;
+  }
+
+  .preview-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .pdf-preview,
+  .word-preview {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .pdf-content,
+  .word-content {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+  }
+
+  .pdf-footer,
+  .word-footer {
+    padding: 10px 0;
+    text-align: center;
+    font-style: italic;
+    color: #666;
+    border-top: 1px solid #eee;
+  }
   </style>
