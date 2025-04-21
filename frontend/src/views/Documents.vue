@@ -6,6 +6,7 @@
     <div class="documents-actions">
       <div class="upload-area">
         <h2>上传文档</h2>
+        <document-uploader @entity-created="handleEntityCreated"></document-uploader>
         <div 
           class="dropzone"
           :class="{ active: isDragging }"
@@ -236,8 +237,6 @@
     </div>
   </div>
   <!-- 在Documents.vue模板中添加 -->
-  <document-uploader @entity-created="handleEntityCreated" />
-
   <!-- 实体JSON编辑器模态框 -->
   <div v-if="showEntityModal" class="json-edit-modal">
     <div class="json-edit-content">

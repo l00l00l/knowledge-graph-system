@@ -155,58 +155,44 @@ async def upload_document(
                 print(f"Error during knowledge extraction: {e}")
         # 在upload_document函数中添加创建基本实体的部分
         if not extract_knowledge:
-            # 即使不提取知识，也创建一个基本实体            
+            # 创建一个实体对象，注意避免使用与类名相同的变量名
+            new_entity = Entity(
+                id=uuid4(),
+                type="concept",
+                name=doc_model.title,
+                description=doc_model.title,
+                properties={},
+                tags=[],
+                importance=None,
+                understanding_level=None,
+                personal_notes=None,
+                category="基础类型",
+                source_id=UUID(doc_model.id),
+                source_type=doc_model.type,
+                source_location=None,
+                extraction_method="manual_upload",
+                confidence=1.0,
+                version=1,
+                previous_version=None,
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+            
             try:
-                # 确保可以访问document_dict变量
-                document_dict = doc_model.to_dict()
-                
-                entity = Entity(
-                    id=uuid4(),
-                    type="concept",
-                    name=doc_model.title,
-                    description=doc_model.title,
-                    properties={},
-                    tags=[],
-                    importance=None,
-                    understanding_level=None,
-                    personal_notes=None,
-                    category="基础类型",
-                    source_id=UUID(doc_model.id),
-                    source_type=doc_model.type,
-                    source_location=None,
-                    extraction_method="manual_upload",
-                    confidence=1.0,
-                    version=1,
-                    previous_version=None,
-                    created_at=datetime.now(),
-                    updated_at=datetime.now()
-                )
-                
-                # 保存实体到neo4j数据库
-                created_entity = await neo4j_db.create(entity)
+                # 保存实体到 Neo4j 数据库
+                created_entity = await neo4j_db.create(new_entity)
                 print(f"Created document entity: {created_entity.name}")
                 
                 # 添加到响应中
                 return {
                     "document": document_dict,
-                    "entity": entity.dict(),
+                    "entity": new_entity.dict(),
                     "extracted_entities": 0,
                     "extracted_relationships": 0,
                     "message": "Document processed successfully"
                 }
             except Exception as e:
                 print(f"Error creating document entity: {e}")
-                # 如果出错，确保仍然有一个可用的document_dict
-                if 'document_dict' not in locals():
-                    document_dict = doc_model.to_dict()
-                
-                # 返回正常响应，不包含实体信息
-                return {
-                    "document": document_dict,
-                    "extracted_entities": 0,
-                    "extracted_relationships": 0,
-                    "message": "Document processed successfully but entity creation failed"
-                }
         # 继续返回原始响应
         # 将文档转为字典以便序列化
         document_dict = doc_model.to_dict()
