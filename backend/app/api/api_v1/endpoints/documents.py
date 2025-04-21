@@ -299,20 +299,18 @@ async def read_documents(
 
 @router.get("/{document_id}", response_model=dict)
 async def read_document(
-    document_id: UUID,
-    db: Neo4jDatabase = Depends(get_db)
+    document_id: str,
+    sqlite_db: Session = Depends(get_sqlite_db)
 ):
     """获取指定ID的文档"""
-    # Search in mock documents
-    for doc in mock_documents:
-        if doc.id == document_id:
-            doc_dict = doc.dict()
-            doc_dict["id"] = str(doc_dict["id"])
-            if "source_id" in doc_dict and doc_dict["source_id"]:
-                doc_dict["source_id"] = str(doc_dict["source_id"])
-            return doc_dict
+    # Look up document in SQLite database
+    document = sqlite_db.query(Document).filter(Document.id == document_id).first()
     
-    raise HTTPException(status_code=404, detail="Document not found")
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Convert SQLite model to dictionary
+    return document.to_dict()
 
 @router.get("/{document_id}/preview")
 async def preview_document(
