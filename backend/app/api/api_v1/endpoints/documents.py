@@ -333,7 +333,21 @@ async def preview_document(
         file_type = document.type.lower()
         content = ""
         preview_available = True
+        is_image = False
+        image_base64 = None
         
+        # 图片文件处理 - 只需告知前端这是图片类型，不需转base64
+        if file_type in ["jpg", "jpeg", "png", "gif", "bmp", "webp", "svg"]:
+            # 图片文件直接返回相关信息，前端直接使用图片URL加载
+            return {
+                "title": document.title,
+                "type": document.type,
+                "is_image": True,
+                "content": f"[图片文件] {file_type.upper()}格式, 大小: {os.path.getsize(file_path)} 字节",
+                "preview_url": f"/api/v1/documents/{document_id}/view-image",  # 新增直接查看图片的端点
+                "preview_available": True
+            }
+
         # 文本文件处理
         if file_type in ["txt", "text"]:
             try:
@@ -400,22 +414,72 @@ async def preview_document(
                 content = "[Word(.doc) 文件] 无法预览旧版Word格式，请下载后查看。"
                 preview_available = False
         
-        # 其他类型文件
+        # 其他类型文件 - 尝试作为文本处理
         else:
-            content = f"[{file_type.upper()} 文件] 未知文件类型，无法预览。"
-            preview_available = False
+            try:
+                async with aiofiles.open(file_path, 'rb') as f:
+                    binary_content = await f.read()
+                
+                # 尝试将内容解码为文本
+                content = binary_content.decode('utf-8', errors='replace')
+                if not content.strip():
+                    content = f"[{file_type.upper()} 文件] 作为文本预览结果为空。"
+            except Exception as e:
+                content = f"[{file_type.upper()} 文件] 尝试作为文本处理出错: {str(e)}"
+                preview_available = False
         
         return {
             "title": document.title,
             "type": document.type,
             "content": content,
+            "is_image": False,
             "preview_available": preview_available
-        }
+        } 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error previewing document: {str(e)}")
 
+@router.get("/{document_id}/view-image")
+async def view_image(
+    document_id: str,
+    sqlite_db: Session = Depends(get_sqlite_db)
+):
+    """直接查看图片文件"""
+    try:
+        # 从SQLite获取文档
+        document = sqlite_db.query(Document).filter(Document.id == document_id).first()
+        
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        file_path = document.file_path
+        if not file_path or not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Document file not found")
+        
+        # 根据文件类型确定MIME类型
+        file_type = document.type.lower()
+        mime_types = {
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "png": "image/png",
+            "gif": "image/gif",
+            "bmp": "image/bmp",
+            "webp": "image/webp",
+            "svg": "image/svg+xml"
+        }
+        media_type = mime_types.get(file_type, "application/octet-stream")
+        
+        # 直接返回图片文件
+        return FileResponse(
+            path=file_path,
+            media_type=media_type
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error viewing image: {str(e)}")
+    
 @router.get("/{document_id}/download")
 async def download_document(
     document_id: str,

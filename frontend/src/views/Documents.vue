@@ -183,6 +183,13 @@
             <p>Word预览可能不完整。要查看完整格式，请下载文件。</p>
           </div>
         </div>
+        <div v-else-if="previewingDocument && previewingDocument.is_image" class="image-preview">
+          <img 
+            :src="previewingDocument.preview_url" 
+            :alt="previewingDocument.title" 
+            class="preview-image"
+          />
+        </div>
         <div v-else-if="documentContent && documentContent.startsWith('[')" class="binary-preview">
           <i :class="getPreviewIcon()"></i>
           <p>{{ documentContent }}</p>
@@ -1614,5 +1621,22 @@ h2 {
 
 .close-btn:hover {
   color: #333;
+}
+
+.image-preview {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px;
+  background-color: #f5f5f5;
+  height: 100%;
+  min-height: 200px;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 </style>
