@@ -431,7 +431,7 @@ async def preview_document(
         return {
             "title": document.title,
             "type": document.type,
-            "content": content,
+            "content": "不支持预览的文件类型",
             "is_image": False,
             "preview_available": preview_available
         } 

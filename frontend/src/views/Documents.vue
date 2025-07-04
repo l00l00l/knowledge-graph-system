@@ -310,7 +310,7 @@ export default {
       isProcessingUrl: false,
       isDeleting: false,
       selectedFiles: [],
-      extractKnowledge: true,
+      extractKnowledge: false,
       webUrl: '',
       searchQuery: '',
       typeFilter: '',

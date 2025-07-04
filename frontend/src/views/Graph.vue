@@ -633,14 +633,14 @@
           // 基础类型
           {"id": 1, "type_code": "concept", "type_name": "概念", "category": "基础类型", "icon": "fa-lightbulb", "color": "#d62728"},
           {"id": 2, "type_code": "person", "type_name": "人物", "category": "基础类型", "icon": "fa-user", "color": "#ff7f0e"},
-          {"id": 3, "type_code": "organization", "type_name": "组织", "category": "基础类型", "icon": "fa-building", "color": "#1f77b4"},
+          {"id": 3, "type_code": "organization", "type_name": "组织", "category": "基础类型", "icon": "fa-building", "color": "#7f7f7f"},
           {"id": 4, "type_code": "location", "type_name": "地点", "category": "基础类型", "icon": "fa-map-marker", "color": "#2ca02c"},
           {"id": 5, "type_code": "time", "type_name": "时间", "category": "基础类型", "icon": "fa-clock", "color": "#9467bd"},
           {"id": 6, "type_code": "event", "type_name": "事件", "category": "基础类型", "icon": "fa-calendar", "color": "#8c564b"},
           
           // 领域类型
           {"id": 7, "type_code": "technology", "type_name": "技术", "category": "领域类型", "icon": "fa-microchip", "color": "#e377c2"},
-          {"id": 8, "type_code": "theory", "type_name": "理论", "category": "领域类型", "icon": "fa-book", "color": "#7f7f7f"},
+          {"id": 8, "type_code": "theory", "type_name": "理论", "category": "领域类型", "icon": "fa-book", "color": "#1f77b4"},
           {"id": 9, "type_code": "method", "type_name": "方法", "category": "领域类型", "icon": "fa-cogs", "color": "#bcbd22"},
           {"id": 10, "type_code": "problem", "type_name": "问题", "category": "领域类型", "icon": "fa-question-circle", "color": "#17becf"},
           {"id": 11, "type_code": "tool", "type_name": "工具", "category": "领域类型", "icon": "fa-wrench", "color": "#9edae5"},
@@ -672,7 +672,8 @@
           {"id": 9, "type_code": "similar_to", "type_name": "类似于", "category": "个人类型", "icon": "fa-equals", "color": "#666666"},
           {"id": 10, "type_code": "reminds_of", "type_name": "提醒我", "category": "个人类型", "icon": "fa-bell", "color": "#666666"},
           {"id": 11, "type_code": "inspires", "type_name": "启发", "category": "个人类型", "icon": "fa-lightbulb", "color": "#666666"},
-          {"id": 12, "type_code": "confuses", "type_name": "困惑", "category": "个人类型", "icon": "fa-question-circle", "color": "#666666"}
+          {"id": 12, "type_code": "confuses", "type_name": "困惑", "category": "个人类型", "icon": "fa-question-circle", "color": "#666666"},
+          {"id": 12, "type_code": "测试", "type_name": "测试", "category": "个人类型", "icon": "fa-question-circle", "color": "#666666"}
         ],
         
         // 初始化分类选择器
@@ -2385,14 +2386,10 @@
       },
 
       getNodeColor(type) {
-        const colorMap = {
-          'person': '#ff7f0e',
-          'organization': '#1f77b4',
-          'location': '#2ca02c',
-          'concept': '#d62728',
-          'time': '#9467bd',
-          'event': '#8c564b'
-        };
+        const colorMap = {};
+        this.entityTypes.forEach(item => {
+          colorMap[item.type_code] = item.color;
+        });
         return colorMap[type] || '#aaa';
       }
     },
