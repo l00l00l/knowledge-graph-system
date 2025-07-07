@@ -8,3 +8,5 @@ auto_commit.sh
 .env.example
 README.md 
 requirements.txt
+npm.log
+uvicorn.log
